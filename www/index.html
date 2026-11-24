@@ -1,0 +1,1894 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>פרומפטר + מצלמה (שלב 7)</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Heebo:wght@400;600;700;800&display=swap');
+    body {
+      font-family: 'Heebo', 'Inter', sans-serif;
+      background-color: #09090b;
+      color: #ffffff;
+      margin: 0;
+      overflow: hidden;
+    }
+    .mirror-video {
+      transform: scaleX(-1);
+    }
+    .vertical-range {
+      writing-mode: vertical-lr;
+      direction: ltr;
+    }
+    .prompter-mask {
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%);
+      mask-image: linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%);
+    }
+    @keyframes captionPopIn {
+      0% { opacity: 0; transform: translateY(10px) scale(0.97); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .caption-animate {
+      animation: captionPopIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    .text-neon-glow {
+      color: #f0f9ff;
+      text-shadow: 0 0 6px #22d3ee, 0 0 16px #06b6d4, 0 0 28px #a855f7, 0 2px 6px rgba(0, 0, 0, 0.9);
+    }
+    .text-3d-outline {
+      color: #ffffff;
+      -webkit-text-stroke: 1.5px #09090b;
+      text-shadow: 0 3px 0 #09090b, 3px 3px 0 #4f46e5, 0 6px 14px rgba(0, 0, 0, 0.85);
+    }
+  </style>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#09090b" />
+  <link rel="icon" type="image/png" href="icon-512.png" />
+</head>
+<body class="h-screen w-screen flex items-center justify-center bg-zinc-950">
+
+  <!-- Mobile-style App Frame -->
+  <div class="relative w-full h-full max-w-md max-h-[900px] bg-black overflow-hidden sm:rounded-3xl sm:border sm:border-zinc-800 shadow-2xl flex flex-col">
+
+    <!-- 1. Camera Preview Layer (wrapped in aspect ratio container) -->
+    <div id="cameraStage" class="absolute inset-0 flex items-center justify-center bg-black pointer-events-none">
+      <div id="aspectFrame" class="relative w-full h-full overflow-hidden transition-all duration-300">
+        <video id="cameraPreview" autoplay playsinline muted class="w-full h-full object-cover mirror-video"></video>
+      </div>
+    </div>
+    <canvas id="recordCanvas" class="hidden"></canvas>
+
+    <!-- Rule-of-Thirds Framing Grid (speaker-only) -->
+    <div id="framingGrid" class="hidden absolute inset-0 z-10 pointer-events-none drop-shadow-[0_0_2px_rgba(0,0,0,0.9)]">
+      <div class="w-full h-full grid grid-cols-3 grid-rows-3">
+        <div class="border-r-2 border-b-2 border-white/60"></div>
+        <div class="border-r-2 border-b-2 border-white/60"></div>
+        <div class="border-b-2 border-white/60"></div>
+        <div class="border-r-2 border-b-2 border-white/60"></div>
+        <div class="border-r-2 border-b-2 border-white/60 flex items-center justify-center">
+          <div class="w-3 h-3 rounded-full border-2 border-cyan-300/80"></div>
+        </div>
+        <div class="border-b-2 border-white/60"></div>
+        <div class="border-r-2 border-white/60"></div>
+        <div class="border-r-2 border-white/60"></div>
+        <div></div>
+      </div>
+    </div>
+
+    <!-- Screen Light Ring Overlay -->
+    <div id="lightRingOverlay" class="hidden absolute inset-0 z-30 pointer-events-none rounded-[inherit] ring-[14px] ring-inset ring-white/85 shadow-[inset_0_0_60px_rgba(255,255,255,0.75)]"></div>
+
+    <!-- Fallback Demo Background -->
+    <div id="demoBackdrop" class="hidden absolute inset-0 bg-gradient-to-br from-slate-900 via-zinc-900 to-indigo-950 flex flex-col items-center justify-end pb-60 px-6 text-center">
+      <div class="bg-zinc-900/80 border border-zinc-700/80 rounded-2xl p-4 max-w-xs backdrop-blur-md">
+        <p class="text-sm font-semibold text-amber-300 mb-1">מצב הדגמה (ללא מצלמה פעילה)</p>
+        <p id="cameraErrorMsg" class="text-xs text-zinc-300 leading-relaxed">
+          ניתן לבדוק את גלילת הטקסט והכתוביות המתוזמנות כבר עכשיו, או לאפשר גישה למצלמה בדפדפן באנדרואיד.
+        </p>
+        <button id="retryCameraBtn" type="button" class="mt-3 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-semibold transition">
+          נסה להפעיל מצלמה
+        </button>
+      </div>
+    </div>
+
+    <!-- 2. Minimal Corner Header (keeps center-top clear so text hugs the camera lens) -->
+    <div class="relative z-20 flex items-center justify-between px-3 pt-2 pb-1 bg-gradient-to-b from-black/70 to-transparent">
+      <div class="flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/15">
+        <span id="recDot" class="w-2 h-2 rounded-full bg-zinc-500"></span>
+        <span id="timerText" class="text-[11px] font-mono font-semibold tracking-wider text-zinc-200">00:00</span>
+      </div>
+
+      <button id="studioMenuBtn" type="button" class="flex items-center gap-1.5 text-[11px] font-bold text-white bg-black/60 hover:bg-zinc-800 backdrop-blur-md px-3 py-1 rounded-full border border-white/15 transition active:scale-95" title="תסריטים, כתוביות, טייקים והגדרות מצלמה">
+        <span>☰ תפריט</span>
+      </button>
+    </div>
+
+    <!-- 3. Teleprompter Overlay + Vertical Right Progress Slider -->
+    <div id="prompterWrapper" class="relative z-20 mx-3 mt-1 flex items-stretch gap-2" style="height: 208px;">
+      <!-- Vertical Progress Slider (Right side in RTL) -->
+      <div class="w-8 bg-black/55 backdrop-blur-md rounded-2xl border border-white/15 py-2 flex flex-col items-center justify-between gap-1.5 shrink-0">
+        <span id="progressPercentLabel" class="text-[9px] font-mono font-bold text-indigo-300">0%</span>
+        <input id="progressScrubber" type="range" min="0" max="100" value="0" class="vertical-range flex-1 w-2 accent-indigo-400 cursor-pointer" aria-label="פס התקדמות אנכי בתסריט" />
+      </div>
+
+      <!-- Teleprompter Text Box (tap to pause/resume during recording) -->
+      <div id="prompterBox" class="relative flex-1 h-full rounded-2xl bg-black/60 backdrop-blur-sm border border-white/15 overflow-hidden prompter-mask cursor-pointer select-none" title="הקש להשהיה או המשך בזמן הקלטה">
+        <!-- Active-Line Focus Band -->
+        <div id="focusBand" class="absolute top-10 left-0 right-0 h-11 bg-indigo-500/15 border-y border-indigo-400/45 pointer-events-none"></div>
+        <!-- Tap Pause Badge -->
+        <div id="tapPauseBadge" class="hidden absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full bg-amber-400 text-black text-[10px] font-bold pointer-events-none">
+          מושהה (הקש להמשך)
+        </div>
+        <div id="prompterTrack" class="pt-11 pb-40 text-right will-change-transform" style="padding-left: 16px; padding-right: 16px;">
+          <div id="scriptContent" class="font-semibold text-white drop-shadow whitespace-pre-line" style="font-size: 20px; line-height: 1.6;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spacer -->
+    <div class="flex-1"></div>
+
+    <!-- 3b. On-Screen Pro Broadcast Timed Caption -->
+    <div id="screenCaptionContainer" class="relative z-10 px-4 mb-2.5 flex justify-center pointer-events-none">
+      <div id="screenCaptionBox" class="hidden max-w-[94%] transition-all duration-200">
+        <div id="screenCaptionAccent" class="hidden"></div>
+        <div id="screenCaptionInner" class="flex flex-col">
+          <span id="screenCaptionBadge" class="hidden text-[10px] font-extrabold tracking-wide uppercase mb-0.5"></span>
+          <p id="screenCaptionMain" class="leading-snug"></p>
+          <div id="screenCaptionDivider" class="hidden"></div>
+          <p id="screenCaptionSub" class="leading-tight mt-0.5"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Countdown Overlay -->
+    <div id="countdownOverlay" class="hidden absolute inset-0 z-25 flex flex-col items-center justify-center bg-black/45 backdrop-blur-[2px] pointer-events-none">
+      <div class="w-28 h-28 rounded-full bg-indigo-600/90 border-4 border-white/80 flex items-center justify-center shadow-2xl">
+        <span id="countdownNumber" class="text-5xl font-bold text-white">3</span>
+      </div>
+      <p class="mt-3 text-sm font-semibold text-white drop-shadow">התכונן לצילום...</p>
+    </div>
+
+    <!-- 4. Bottom Controls -->
+    <div class="relative z-20 px-5 pb-6 pt-3 bg-gradient-to-t from-black/95 via-black/80 to-transparent flex flex-col items-center gap-2.5">
+
+      <!-- Collapsible Settings Drawer (hidden by default for a clean camera view) -->
+      <div id="settingsDrawer" class="hidden w-full max-h-52 overflow-y-auto flex flex-col gap-2 bg-zinc-950/75 border border-white/15 rounded-2xl p-2.5 backdrop-blur-md">
+        <div class="flex items-center justify-between px-1">
+          <span class="text-[11px] font-bold text-indigo-300">הגדרות פרומפטר</span>
+          <button id="closeSettingsDrawerBtn" type="button" class="px-2.5 py-0.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-[11px] font-semibold text-zinc-200 border border-white/10 transition active:scale-95">
+            כווץ ✕
+          </button>
+        </div>
+        <!-- Voice-Activated Scrolling Toggle Strip -->
+      <div class="w-full bg-zinc-900/85 border border-white/10 rounded-2xl px-3.5 py-2 backdrop-blur-md flex flex-col gap-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <span id="voiceLed" class="w-2.5 h-2.5 rounded-full bg-zinc-600 shrink-0 transition-colors"></span>
+            <span id="voiceStatusText" class="text-xs font-semibold text-zinc-200 truncate">גלילה לפי קול</span>
+          </div>
+          <button id="voiceModeBtn" type="button" class="px-3 py-1 rounded-full text-[11px] font-bold bg-zinc-800 text-zinc-300 border border-white/10 shrink-0 transition active:scale-95">
+            כבוי (רגיל)
+          </button>
+        </div>
+        <div id="voiceMeterRow" class="hidden flex items-center gap-2">
+          <div class="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+            <div id="voiceMeterBar" class="h-full w-0 bg-emerald-400 transition-all duration-75"></div>
+          </div>
+          <span class="text-[10px] text-zinc-400">רגישות</span>
+          <input id="voiceSensSlider" type="range" min="1" max="15" value="3" class="w-16 accent-emerald-400 h-1 bg-zinc-700 rounded-lg cursor-pointer" aria-label="רגישות מיקרופון" />
+        </div>
+      </div>
+
+      <!-- Teleprompter Settings Bar -->
+      <div class="w-full bg-zinc-900/85 border border-white/10 rounded-2xl px-3.5 py-2.5 backdrop-blur-md flex items-center justify-between gap-3">
+        <div class="flex-1 flex flex-col gap-1">
+          <div class="flex items-center justify-between text-[11px] text-zinc-300">
+            <span>מהירות</span>
+            <span id="speedValueLabel" class="font-mono font-semibold text-indigo-300">28</span>
+          </div>
+          <input id="speedSlider" type="range" min="10" max="80" value="28" class="w-full accent-indigo-500 cursor-pointer h-1.5 bg-zinc-700 rounded-lg" aria-label="מהירות גלילה" />
+        </div>
+
+        <div class="w-px h-8 bg-white/10"></div>
+
+        <div class="flex items-center gap-1">
+          <button id="fontDownBtn" type="button" class="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-xs font-bold text-zinc-200 transition active:scale-95" title="הקטן טקסט">א-</button>
+          <span id="fontSizeLabel" class="text-xs font-mono text-zinc-300 w-6 text-center">20</span>
+          <button id="fontUpBtn" type="button" class="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-xs font-bold text-zinc-200 transition active:scale-95" title="הגדל טקסט">א+</button>
+        </div>
+
+        <div class="w-px h-8 bg-white/10"></div>
+
+        <div class="flex items-center gap-1.5" title="צבע טקסט בפרומפטר">
+          <button type="button" data-color="text-white" class="color-dot w-5 h-5 rounded-full bg-white border-2 border-indigo-400 transition"></button>
+          <button type="button" data-color="text-amber-300" class="color-dot w-5 h-5 rounded-full bg-amber-300 border-2 border-transparent transition"></button>
+          <button type="button" data-color="text-cyan-300" class="color-dot w-5 h-5 rounded-full bg-cyan-300 border-2 border-transparent transition"></button>
+        </div>
+      </div>
+
+      <!-- Background Opacity Slider Row -->
+      <div class="w-full bg-zinc-900/85 border border-white/10 rounded-2xl px-3.5 py-1.5 backdrop-blur-md flex items-center gap-3">
+        <span class="text-[11px] text-zinc-300 shrink-0">שקיפות רקע</span>
+        <input id="opacitySlider" type="range" min="0" max="95" value="60" class="flex-1 accent-cyan-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg" aria-label="שקיפות רקע הפרומפטר" />
+        <span id="opacityValueLabel" class="text-[11px] font-mono font-semibold text-cyan-300 w-8 text-left">60%</span>
+      </div>
+
+      <!-- Eye-Line Height, Margins & Line Spacing Row -->
+      <div class="w-full bg-zinc-900/85 border border-white/10 rounded-2xl px-3.5 py-2 backdrop-blur-md grid grid-cols-3 gap-2.5">
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center justify-between text-[10px] text-zinc-300">
+            <span>גובה חלונית</span>
+            <span id="heightValueLabel" class="font-mono text-indigo-300">208</span>
+          </div>
+          <input id="heightSlider" type="range" min="140" max="300" value="208" class="w-full accent-indigo-400 h-1 bg-zinc-700 rounded-lg cursor-pointer" aria-label="גובה חלונית הפרומפטר" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center justify-between text-[10px] text-zinc-300">
+            <span>רוחב שוליים</span>
+            <span id="marginValueLabel" class="font-mono text-indigo-300">16</span>
+          </div>
+          <input id="marginSlider" type="range" min="12" max="56" value="16" class="w-full accent-indigo-400 h-1 bg-zinc-700 rounded-lg cursor-pointer" aria-label="רוחב שוליים" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center justify-between text-[10px] text-zinc-300">
+            <span>מרווח שורות</span>
+            <span id="lineHeightValueLabel" class="font-mono text-indigo-300">1.6</span>
+          </div>
+          <input id="lineHeightSlider" type="range" min="1.2" max="2.2" step="0.1" value="1.6" class="w-full accent-indigo-400 h-1 bg-zinc-700 rounded-lg cursor-pointer" aria-label="מרווח שורות" />
+        </div>
+      </div>
+
+      <!-- Focus Band Toggle -->
+      <label class="w-full bg-zinc-900/85 border border-white/10 rounded-2xl px-3.5 py-1.5 backdrop-blur-md flex items-center justify-between cursor-pointer">
+        <span class="text-[11px] text-zinc-200 font-semibold">פס מיקוד לשורה הפעילה</span>
+        <input id="focusBandToggle" type="checkbox" checked class="w-4 h-4 accent-indigo-500" />
+      </label>
+      </div>
+
+      <!-- Quick Action Pills (Settings Drawer, Framing Grid, Light Ring) -->
+      <div class="w-full flex items-center justify-center gap-2">
+        <button id="toggleSettingsBtn" type="button" class="px-3 py-1.5 rounded-full bg-zinc-900/85 hover:bg-zinc-800 border border-white/15 text-[11px] font-semibold text-zinc-200 backdrop-blur-md transition active:scale-95">
+          הגדרות
+        </button>
+        <button id="toggleGridBtn" type="button" class="px-3 py-1.5 rounded-full bg-zinc-900/85 hover:bg-zinc-800 border border-white/15 text-[11px] font-semibold text-zinc-200 backdrop-blur-md transition active:scale-95">
+          רשת מיקום
+        </button>
+        <button id="toggleLightBtn" type="button" class="px-3 py-1.5 rounded-full bg-zinc-900/85 hover:bg-zinc-800 border border-white/15 text-[11px] font-semibold text-zinc-200 backdrop-blur-md transition active:scale-95">
+          תאורת מסך
+        </button>
+      </div>
+
+      <!-- Recorded Video Preview & Download Banner -->
+      <div id="downloadArea" class="hidden w-full flex items-center justify-between bg-emerald-950/90 border border-emerald-500/40 rounded-xl px-3.5 py-2 backdrop-blur-md gap-2">
+        <span class="text-xs font-semibold text-emerald-200">הצילום מוכן!</span>
+        <div class="flex items-center gap-2">
+          <button id="previewVideoBtn" type="button" class="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold rounded-lg transition">צפה בסרטון</button>
+          <a id="downloadLink" download="prompter-video.webm" class="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold rounded-lg transition">הורד</a>
+        </div>
+      </div>
+
+      <div class="w-full flex items-center justify-center gap-7">
+        <button id="resetBtn" type="button" class="w-14 h-11 rounded-2xl bg-zinc-800/80 hover:bg-zinc-700 border border-white/15 flex items-center justify-center text-xs font-semibold text-zinc-200 transition active:scale-95">איפוס</button>
+
+        <button id="recordBtn" type="button" class="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center transition active:scale-95 shadow-lg bg-black/30" aria-label="התחל או עצור הקלטה">
+          <div id="recordIcon" class="w-14 h-14 rounded-full bg-red-600 transition-all duration-200"></div>
+        </button>
+
+        <button id="pauseScrollBtn" type="button" class="w-14 h-11 rounded-2xl bg-zinc-800/80 hover:bg-zinc-700 border border-white/15 flex items-center justify-center text-xs font-semibold text-zinc-200 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed" disabled>השהה</button>
+      </div>
+
+      <p id="statusHint" class="text-[11px] text-zinc-300">לחץ על הכפתור האדום לספירה לאחור והתחלת צילום</p>
+    </div>
+
+    <!-- 5. Rich Script Editor & Script Library Modal -->
+    <div id="scriptModal" class="hidden absolute inset-0 z-30 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="w-full max-h-[88vh] bg-zinc-900 border border-zinc-700 rounded-2xl p-4 flex flex-col gap-3 shadow-2xl overflow-y-auto">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">ספריית תסריטים ועריכת טקסט</h2>
+          <button id="closeModalBtn" type="button" class="text-xs text-zinc-400 hover:text-white px-2 py-1">סגור</button>
+        </div>
+
+        <!-- Saved Scripts Selector -->
+        <div class="flex flex-col gap-1.5 bg-zinc-950/70 border border-zinc-800 rounded-xl p-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-semibold text-indigo-300">תסריטים שמורים:</span>
+            <button id="saveAsNewBtn" type="button" class="text-[11px] font-bold text-emerald-300 hover:text-emerald-200">+ שמור כחדש בספרייה</button>
+          </div>
+          <input id="scriptTitleInput" type="text" dir="rtl" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500" placeholder="שם התסריט (למשל: פתיח לרילס)" />
+          <div id="scriptLibraryList" class="flex flex-wrap gap-1.5 mt-1"></div>
+        </div>
+
+        <div class="flex items-center gap-2 bg-zinc-950/80 border border-zinc-800 rounded-xl p-1.5">
+          <button id="formatBoldBtn" type="button" class="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-extrabold text-white transition">B מודגש</button>
+          <button id="formatHighlightBtn" type="button" class="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/30 text-xs font-bold text-amber-300 transition">הדגשת מילה</button>
+          <span class="text-[10px] text-zinc-400 mr-auto">סמן מילה ולחץ לעיצוב</span>
+        </div>
+
+        <textarea id="scriptInput" rows="6" dir="rtl" class="w-full bg-zinc-950 border border-zinc-700 rounded-xl p-3 text-sm text-white leading-relaxed focus:outline-none focus:border-indigo-500 resize-none" placeholder="הדבק או כתוב כאן את הטקסט שלך..."></textarea>
+
+        <div class="flex items-center justify-between gap-2">
+          <button id="clearScriptBtn" type="button" class="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition">נקה הכל</button>
+          <div class="flex items-center gap-2">
+            <button id="cancelScriptBtn" type="button" class="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 transition">ביטול</button>
+            <button id="saveScriptBtn" type="button" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition">שמור והפעל</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. Timed Styled Captions Modal -->
+    <div id="captionModal" class="hidden absolute inset-0 z-30 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="w-full max-h-[88vh] bg-zinc-900 border border-zinc-700 rounded-2xl p-4 flex flex-col gap-3 shadow-2xl overflow-y-auto">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">כתוביות מעוצבות לפי תזמון</h2>
+          <button id="closeCaptionModalBtn" type="button" class="text-xs text-zinc-400 hover:text-white px-2 py-1">סגור</button>
+        </div>
+
+        <label class="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 cursor-pointer">
+          <span class="text-xs font-semibold text-zinc-200">הפעל כתוביות מתוזמנות בהקלטה</span>
+          <input id="captionToggle" type="checkbox" class="w-4 h-4 accent-indigo-500" />
+        </label>
+
+        <div class="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3 flex flex-col gap-2">
+          <p class="text-xs font-semibold text-indigo-300">הוסף כתובית חדשה:</p>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="flex flex-col gap-1">
+              <span class="text-[11px] text-zinc-400">משנייה:</span>
+              <input id="cueStartInput" type="number" min="0" value="0" class="bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white" />
+            </div>
+            <div class="flex flex-col gap-1">
+              <span class="text-[11px] text-zinc-400">עד שנייה:</span>
+              <input id="cueEndInput" type="number" min="1" value="5" class="bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white" />
+            </div>
+          </div>
+
+          <input id="captionMainInput" type="text" dir="rtl" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500" placeholder="כותרת ראשית (למשל: טיפ מספר 1)" />
+          <input id="captionSubInput" type="text" dir="rtl" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500" placeholder="שורת משנה (אופציונלי)" />
+
+          <div class="grid grid-cols-2 gap-1.5 mt-0.5">
+            <button type="button" data-style="broadcast" class="cap-style-btn py-2 px-2 rounded-lg bg-slate-900 text-[11px] font-bold text-white border-2 border-cyan-400 flex items-center justify-center gap-1.5">
+              <span class="w-1.5 h-3.5 rounded-full bg-cyan-400"></span> כרטיס שידור
+            </button>
+            <button type="button" data-style="gradient" class="cap-style-btn py-2 px-2 rounded-lg bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 text-[11px] font-bold text-white border-2 border-transparent">
+              גרדיאנט מודרני
+            </button>
+            <button type="button" data-style="cinematic" class="cap-style-btn py-2 px-2 rounded-lg bg-zinc-950 text-[11px] font-bold text-amber-300 border-2 border-transparent underline decoration-amber-400">
+              קולנועי נקי
+            </button>
+            <button type="button" data-style="reels" class="cap-style-btn py-2 px-2 rounded-lg bg-amber-400 text-[11px] font-extrabold text-black border-2 border-transparent">
+              סטייל רילס בולט
+            </button>
+            <button type="button" data-style="glow" class="cap-style-btn py-2 px-2 rounded-lg bg-zinc-950 text-[11px] font-extrabold text-neon-glow border-2 border-transparent">
+              ניאון זוהר (Glow)
+            </button>
+            <button type="button" data-style="outline3d" class="cap-style-btn py-2 px-2 rounded-lg bg-zinc-900 text-[11px] font-black text-3d-outline border-2 border-transparent">
+              קו מתאר 3D
+            </button>
+          </div>
+
+          <button id="addCueBtn" type="button" class="mt-1 w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition">
+            + הוסף כתובית לתזמון
+          </button>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs font-semibold text-zinc-300">רשימת כתוביות מתוזמנות:</span>
+          <div id="cueListContainer" class="flex flex-col gap-1.5 max-h-40 overflow-y-auto"></div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 mt-1">
+          <button id="saveCaptionBtn" type="button" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition">שמור וסגור</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6b. Studio Menu Modal (Tier 2 Pre/Post-Shoot Actions) -->
+    <div id="studioMenuModal" class="hidden absolute inset-0 z-30 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+      <div class="w-full bg-zinc-900 border border-zinc-700 rounded-2xl p-4 flex flex-col gap-2.5 shadow-2xl">
+        <div class="flex items-center justify-between mb-0.5">
+          <h2 class="text-sm font-bold text-white">תפריט סטודיו</h2>
+          <button id="closeStudioMenuBtn" type="button" class="text-xs text-zinc-400 hover:text-white px-2 py-1">סגור ✕</button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <button id="editScriptBtn" type="button" class="py-2.5 px-3 rounded-xl bg-indigo-600/90 hover:bg-indigo-500 text-xs font-bold text-white border border-indigo-400/30 transition active:scale-95">
+            תסריטים ועריכה
+          </button>
+          <button id="captionBtn" type="button" class="py-2.5 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/35 text-xs font-bold text-amber-200 border border-amber-400/35 transition active:scale-95">
+            כתוביות מתוזמנות
+          </button>
+          <button id="takesBtn" type="button" class="py-2.5 px-3 rounded-xl bg-emerald-600/25 hover:bg-emerald-600/40 text-xs font-bold text-emerald-200 border border-emerald-400/35 transition active:scale-95">
+            טייקים (0)
+          </button>
+          <button id="switchCamBtn" type="button" class="py-2.5 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-100 border border-white/15 transition active:scale-95 disabled:opacity-40">
+            החלף מצלמה
+          </button>
+        </div>
+
+        <button id="aspectBtn" type="button" class="w-full py-2 px-3 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/70 text-xs font-mono font-bold text-cyan-200 border border-cyan-400/30 transition active:scale-95 disabled:opacity-40">
+          יחס צילום: 9:16
+        </button>
+      </div>
+    </div>
+
+    <!-- 7. Multiple Takes Library Modal -->
+    <div id="takesModal" class="hidden absolute inset-0 z-30 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="w-full max-h-[85vh] bg-zinc-900 border border-zinc-700 rounded-2xl p-4 flex flex-col gap-3 shadow-2xl overflow-y-auto">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">טייקים שמורים (השוואה והורדה)</h2>
+          <button id="closeTakesModalBtn" type="button" class="text-xs text-zinc-400 hover:text-white px-2 py-1">סגור</button>
+        </div>
+        <div id="takesListContainer" class="flex flex-col gap-2 max-h-80 overflow-y-auto"></div>
+      </div>
+    </div>
+
+    <!-- 8. Video Preview Modal -->
+    <div id="videoPreviewModal" class="hidden absolute inset-0 z-30 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 gap-3">
+      <div class="w-full flex items-center justify-between">
+        <h2 class="text-sm font-bold text-white">תצוגה מקדימה של הסרטון</h2>
+        <button id="closeVideoModalBtn" type="button" class="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-white">סגור</button>
+      </div>
+      <video id="recordedVideoPlayer" controls playsinline class="w-full max-h-[70vh] rounded-2xl bg-black border border-zinc-700"></video>
+    </div>
+
+  </div>
+
+  <script>
+    const DEFAULT_SCRIPT = `שלום לכולם! היום אני רוצה להראות לכם ==פרומפטר מלא לאנדרואיד== שנבנה צעד אחר צעד.
+
+אפשר לבחור למעלה יחס מסך **9:16** לרילס או **16:9** ליוטיוב, לשמור כמה תסריטים בספרייה, ולהפעיל גלילה חכמה לפי קול!`;
+
+    const DEFAULT_LIBRARY = [
+      { id: 1, title: 'פתיח לרילס (ברירת מחדל)', content: DEFAULT_SCRIPT },
+      { id: 2, title: 'סקירת מוצר קצרה', content: 'היי חברים! היום בדקתי מוצר חדש שאני ==חייב לשתף אתכם==.\n\nשימו לב לשלושה יתרונות מרכזיים שתראו מיד על המסך.' }
+    ];
+
+    const DEFAULT_CUES = [
+      { id: 1, startSec: 0, endSec: 4, main: 'שלום לכולם! מדריך פרומפטר חכם', sub: '00:00 – 00:04 • שידור חי', style: 'broadcast' },
+      { id: 2, startSec: 5, endSec: 10, main: 'כתובית מתוזמנת בעיצוב רילס', sub: 'מופיעה בדיוק בשניות שקבעת', style: 'reels' }
+    ];
+
+    // DOM Elements
+    const aspectFrame = document.getElementById('aspectFrame');
+    const aspectBtn = document.getElementById('aspectBtn');
+    const cameraPreview = document.getElementById('cameraPreview');
+    const recordCanvas = document.getElementById('recordCanvas');
+    const demoBackdrop = document.getElementById('demoBackdrop');
+    const cameraErrorMsg = document.getElementById('cameraErrorMsg');
+    const retryCameraBtn = document.getElementById('retryCameraBtn');
+    const switchCamBtn = document.getElementById('switchCamBtn');
+    const prompterTrack = document.getElementById('prompterTrack');
+    const scriptContent = document.getElementById('scriptContent');
+    const countdownOverlay = document.getElementById('countdownOverlay');
+    const countdownNumber = document.getElementById('countdownNumber');
+    const recordBtn = document.getElementById('recordBtn');
+    const recordIcon = document.getElementById('recordIcon');
+    const resetBtn = document.getElementById('resetBtn');
+    const pauseScrollBtn = document.getElementById('pauseScrollBtn');
+    const recDot = document.getElementById('recDot');
+    const timerText = document.getElementById('timerText');
+    const statusHint = document.getElementById('statusHint');
+    const downloadArea = document.getElementById('downloadArea');
+    const downloadLink = document.getElementById('downloadLink');
+    const previewVideoBtn = document.getElementById('previewVideoBtn');
+    const prompterBox = document.getElementById('prompterBox');
+    const progressScrubber = document.getElementById('progressScrubber');
+    const progressPercentLabel = document.getElementById('progressPercentLabel');
+    const takesBtn = document.getElementById('takesBtn');
+    const takesModal = document.getElementById('takesModal');
+    const closeTakesModalBtn = document.getElementById('closeTakesModalBtn');
+    const takesListContainer = document.getElementById('takesListContainer');
+    const settingsDrawer = document.getElementById('settingsDrawer');
+    const toggleSettingsBtn = document.getElementById('toggleSettingsBtn');
+    const closeSettingsDrawerBtn = document.getElementById('closeSettingsDrawerBtn');
+    const toggleGridBtn = document.getElementById('toggleGridBtn');
+    const toggleLightBtn = document.getElementById('toggleLightBtn');
+    const framingGrid = document.getElementById('framingGrid');
+    const lightRingOverlay = document.getElementById('lightRingOverlay');
+    const prompterWrapper = document.getElementById('prompterWrapper');
+    const focusBand = document.getElementById('focusBand');
+    const tapPauseBadge = document.getElementById('tapPauseBadge');
+    const heightSlider = document.getElementById('heightSlider');
+    const heightValueLabel = document.getElementById('heightValueLabel');
+    const marginSlider = document.getElementById('marginSlider');
+    const marginValueLabel = document.getElementById('marginValueLabel');
+    const lineHeightSlider = document.getElementById('lineHeightSlider');
+    const lineHeightValueLabel = document.getElementById('lineHeightValueLabel');
+    const focusBandToggle = document.getElementById('focusBandToggle');
+    const studioMenuBtn = document.getElementById('studioMenuBtn');
+    const studioMenuModal = document.getElementById('studioMenuModal');
+    const closeStudioMenuBtn = document.getElementById('closeStudioMenuBtn');
+
+    // Voice Scrolling Controls
+    const voiceModeBtn = document.getElementById('voiceModeBtn');
+    const voiceLed = document.getElementById('voiceLed');
+    const voiceStatusText = document.getElementById('voiceStatusText');
+    const voiceMeterRow = document.getElementById('voiceMeterRow');
+    const voiceMeterBar = document.getElementById('voiceMeterBar');
+    const voiceSensSlider = document.getElementById('voiceSensSlider');
+
+    // Settings & Editor Controls
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValueLabel = document.getElementById('speedValueLabel');
+    const fontDownBtn = document.getElementById('fontDownBtn');
+    const fontUpBtn = document.getElementById('fontUpBtn');
+    const fontSizeLabel = document.getElementById('fontSizeLabel');
+    const opacitySlider = document.getElementById('opacitySlider');
+    const opacityValueLabel = document.getElementById('opacityValueLabel');
+    const colorDots = document.querySelectorAll('.color-dot');
+
+    // Script & Library Modal
+    const editScriptBtn = document.getElementById('editScriptBtn');
+    const scriptModal = document.getElementById('scriptModal');
+    const scriptTitleInput = document.getElementById('scriptTitleInput');
+    const scriptLibraryList = document.getElementById('scriptLibraryList');
+    const saveAsNewBtn = document.getElementById('saveAsNewBtn');
+    const scriptInput = document.getElementById('scriptInput');
+    const formatBoldBtn = document.getElementById('formatBoldBtn');
+    const formatHighlightBtn = document.getElementById('formatHighlightBtn');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const cancelScriptBtn = document.getElementById('cancelScriptBtn');
+    const clearScriptBtn = document.getElementById('clearScriptBtn');
+    const saveScriptBtn = document.getElementById('saveScriptBtn');
+
+    // Timed Captions Modal & Overlay
+    const captionBtn = document.getElementById('captionBtn');
+    const captionModal = document.getElementById('captionModal');
+    const closeCaptionModalBtn = document.getElementById('closeCaptionModalBtn');
+    const saveCaptionBtn = document.getElementById('saveCaptionBtn');
+    const captionToggle = document.getElementById('captionToggle');
+    const cueStartInput = document.getElementById('cueStartInput');
+    const cueEndInput = document.getElementById('cueEndInput');
+    const captionMainInput = document.getElementById('captionMainInput');
+    const captionSubInput = document.getElementById('captionSubInput');
+    const capStyleBtns = document.querySelectorAll('.cap-style-btn');
+    const addCueBtn = document.getElementById('addCueBtn');
+    const cueListContainer = document.getElementById('cueListContainer');
+    const screenCaptionBox = document.getElementById('screenCaptionBox');
+    const screenCaptionAccent = document.getElementById('screenCaptionAccent');
+    const screenCaptionInner = document.getElementById('screenCaptionInner');
+    const screenCaptionBadge = document.getElementById('screenCaptionBadge');
+    const screenCaptionMain = document.getElementById('screenCaptionMain');
+    const screenCaptionDivider = document.getElementById('screenCaptionDivider');
+    const screenCaptionSub = document.getElementById('screenCaptionSub');
+
+    // Video Preview Modal
+    const videoPreviewModal = document.getElementById('videoPreviewModal');
+    const closeVideoModalBtn = document.getElementById('closeVideoModalBtn');
+    const recordedVideoPlayer = document.getElementById('recordedVideoPlayer');
+
+    // App State
+    let rawScript = DEFAULT_SCRIPT;
+    let scriptLibrary = [...DEFAULT_LIBRARY];
+    let activeScriptId = 1;
+    let aspectRatio = '9:16'; // '9:16' | '16:9' | '1:1'
+    let mediaStream = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let lastVideoUrl = '';
+    let savedTakes = [];
+    let takeCounter = 0;
+    let facingMode = 'user';
+    let isRecording = false;
+    let isCountingDown = false;
+    let isScrollPaused = false;
+    let countdownInterval = null;
+    let canvasDrawId = null;
+    let scrollY = 0;
+    let scrollAnimId = null;
+    let timerInterval = null;
+    let secondsElapsed = 0;
+    let scrollSpeed = 28;
+    let fontSize = 20;
+    let bgOpacity = 60;
+    let prompterHeight = 208;
+    let prompterMargin = 16;
+    let prompterLineHeight = 1.6;
+    let focusBandEnabled = true;
+    let wakeLockSentinel = null;
+    let prompterColorClass = 'text-white';
+    let lastFrameTime = null;
+
+    // Voice-Activated State
+    let voiceScrollEnabled = false;
+    let voiceThreshold = 3;
+    let isSpeakingNow = false;
+    let lastSpeechTimestamp = 0;
+    let audioCtx = null;
+    let analyserNode = null;
+    let timeData = null;
+    let recognition = null;
+
+    // Timed Caption State
+    let captionEnabled = true;
+    let selectedCueStyle = 'broadcast';
+    let lastRenderedCueId = null;
+    let editingCueId = null;
+    let captionCues = [...DEFAULT_CUES];
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function renderRichScript(text) {
+      let safe = escapeHtml(text);
+      safe = safe.replace(/\*\*(.+?)\*\*/g, '<strong class="font-extrabold underline decoration-white/40">$1</strong>');
+      safe = safe.replace(/==(.+?)==/g, '<span class="bg-amber-400/25 text-amber-200 px-1.5 py-0.5 rounded-md border border-amber-300/30">$1</span>');
+      scriptContent.innerHTML = safe;
+    }
+
+    function applyAspectRatio(ratio) {
+      aspectRatio = ratio;
+      aspectBtn.textContent = `יחס צילום: ${ratio}`;
+      if (ratio === '9:16') {
+        aspectFrame.className = 'relative w-full h-full overflow-hidden transition-all duration-300';
+      } else if (ratio === '16:9') {
+        aspectFrame.className = 'relative w-full aspect-video overflow-hidden border-y border-white/20 transition-all duration-300';
+      } else {
+        aspectFrame.className = 'relative w-full aspect-square overflow-hidden border-y border-white/20 transition-all duration-300';
+      }
+    }
+
+    function applyPrompterColor(colorClass) {
+      prompterColorClass = colorClass;
+      scriptContent.classList.remove('text-white', 'text-amber-300', 'text-cyan-300');
+      scriptContent.classList.add(colorClass);
+      colorDots.forEach((dot) => {
+        if (dot.dataset.color === colorClass) {
+          dot.classList.add('border-indigo-400', 'scale-110');
+          dot.classList.remove('border-transparent');
+        } else {
+          dot.classList.remove('border-indigo-400', 'scale-110');
+          dot.classList.add('border-transparent');
+        }
+      });
+    }
+
+    function renderScriptLibrary() {
+      scriptLibraryList.innerHTML = '';
+      scriptLibrary.forEach((item) => {
+        const chip = document.createElement('div');
+        chip.className = `flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] border cursor-pointer transition ${
+          item.id === activeScriptId
+            ? 'bg-indigo-600 text-white border-indigo-400 font-bold'
+            : 'bg-zinc-900 text-zinc-300 border-zinc-700 hover:bg-zinc-800'
+        }`;
+
+        const label = document.createElement('span');
+        label.textContent = item.title;
+        label.addEventListener('click', () => {
+          activeScriptId = item.id;
+          rawScript = item.content;
+          scriptInput.value = item.content;
+          scriptTitleInput.value = item.title;
+          renderRichScript(rawScript);
+          saveSetting('prompter_script', rawScript);
+          resetScroll();
+          renderScriptLibrary();
+        });
+        chip.appendChild(label);
+
+        if (scriptLibrary.length > 1) {
+          const del = document.createElement('button');
+          del.type = 'button';
+          del.textContent = '×';
+          del.className = 'text-xs text-white/70 hover:text-red-300 font-bold px-0.5';
+          del.addEventListener('click', (e) => {
+            e.stopPropagation();
+            scriptLibrary = scriptLibrary.filter((s) => s.id !== item.id);
+            if (activeScriptId === item.id && scriptLibrary.length > 0) {
+              activeScriptId = scriptLibrary[0].id;
+              rawScript = scriptLibrary[0].content;
+              scriptInput.value = rawScript;
+              scriptTitleInput.value = scriptLibrary[0].title;
+              renderRichScript(rawScript);
+            }
+            saveLibrary();
+            renderScriptLibrary();
+          });
+          chip.appendChild(del);
+        }
+
+        scriptLibraryList.appendChild(chip);
+      });
+    }
+
+    function saveLibrary() {
+      try {
+        localStorage.setItem('prompter_library', JSON.stringify(scriptLibrary));
+      } catch (e) {}
+    }
+
+    function updateVoiceModeUI() {
+      voiceMeterRow.classList.toggle('hidden', !voiceScrollEnabled);
+      if (voiceScrollEnabled) {
+        voiceModeBtn.textContent = 'פעיל (לפי קול)';
+        voiceModeBtn.className = 'px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-500 text-black border border-emerald-300 shrink-0 transition active:scale-95';
+        voiceStatusText.textContent = isRecording
+          ? (isSpeakingNow ? 'מזהה דיבור — גולל' : 'ממתין לדיבור...')
+          : 'גלילה לפי קול (מופעל)';
+      } else {
+        voiceModeBtn.textContent = 'כבוי (רגיל)';
+        voiceModeBtn.className = 'px-3 py-1 rounded-full text-[11px] font-bold bg-zinc-800 text-zinc-300 border border-white/10 shrink-0 transition active:scale-95';
+        voiceStatusText.textContent = 'גלילה לפי קול';
+        voiceLed.className = 'w-2.5 h-2.5 rounded-full bg-zinc-600 shrink-0 transition-colors';
+        voiceMeterBar.style.width = '0%';
+      }
+    }
+
+    function setupAudioAnalyser(stream) {
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass || !stream || !stream.getAudioTracks().length) return;
+        if (audioCtx) audioCtx.close().catch(() => {});
+        audioCtx = new AudioContextClass();
+        const source = audioCtx.createMediaStreamSource(stream);
+        analyserNode = audioCtx.createAnalyser();
+        analyserNode.fftSize = 512;
+        source.connect(analyserNode);
+        timeData = new Uint8Array(analyserNode.fftSize);
+      } catch (e) {}
+    }
+
+    function ensureAudioUnlocked() {
+      if (mediaStream && !analyserNode) {
+        setupAudioAnalyser(mediaStream);
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+    }
+
+    function startSpeechRecognition() {
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRec) return;
+      try {
+        recognition = new SpeechRec();
+        recognition.lang = 'he-IL';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        const markSpeech = () => {
+          lastSpeechTimestamp = performance.now();
+          isSpeakingNow = true;
+        };
+        recognition.onresult = markSpeech;
+        recognition.onspeechstart = markSpeech;
+        recognition.onsoundstart = markSpeech;
+        recognition.onerror = () => {};
+        recognition.onend = () => {
+          if (isRecording && voiceScrollEnabled) {
+            try { recognition.start(); } catch (e) {}
+          }
+        };
+        recognition.start();
+      } catch (e) {}
+    }
+
+    function stopSpeechRecognition() {
+      if (recognition) {
+        try { recognition.stop(); } catch (e) {}
+        recognition = null;
+      }
+    }
+
+    function detectVoiceActivity(now) {
+      // If no microphone stream is active (e.g. Demo Mode), fall back to regular scroll
+      if (!mediaStream || !mediaStream.getAudioTracks().length) {
+        isSpeakingNow = true;
+        voiceLed.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0';
+        voiceStatusText.textContent = 'אין מיקרופון פעיל — גולל רגיל';
+        return;
+      }
+
+      if (analyserNode && timeData) {
+        analyserNode.getByteTimeDomainData(timeData);
+        let sumSq = 0;
+        for (let i = 0; i < timeData.length; i++) {
+          const diff = timeData[i] - 128;
+          sumSq += diff * diff;
+        }
+        const rms = Math.sqrt(sumSq / timeData.length);
+        const meterPct = Math.min(100, Math.round((rms / 25) * 100));
+        voiceMeterBar.style.width = `${meterPct}%`;
+
+        if (rms >= voiceThreshold) {
+          lastSpeechTimestamp = now;
+        }
+      }
+
+      isSpeakingNow = (now - lastSpeechTimestamp) < 750;
+      voiceLed.className = isSpeakingNow
+        ? 'w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0 animate-pulse'
+        : 'w-2.5 h-2.5 rounded-full bg-amber-400/70 shrink-0';
+      voiceStatusText.textContent = isSpeakingNow ? 'מזהה דיבור — גולל' : 'ממתין לדיבור...';
+    }
+
+    function getActiveCue(sec) {
+      if (!captionEnabled) return null;
+      return captionCues.find((c) => sec >= c.startSec && sec <= c.endSec) || null;
+    }
+
+    function renderScreenCaption(sec) {
+      const cue = getActiveCue(sec);
+      if (!cue) {
+        screenCaptionBox.classList.add('hidden');
+        lastRenderedCueId = null;
+        return;
+      }
+
+      const isNewCue = lastRenderedCueId !== cue.id;
+      lastRenderedCueId = cue.id;
+
+      const hasSub = Boolean(cue.sub && cue.sub.trim().length > 0);
+      screenCaptionMain.textContent = cue.main;
+      screenCaptionSub.textContent = cue.sub || '';
+      screenCaptionSub.classList.toggle('hidden', !hasSub);
+
+      // Reset classes
+      screenCaptionAccent.className = 'hidden';
+      screenCaptionBadge.className = 'hidden';
+      screenCaptionDivider.className = 'hidden';
+      screenCaptionInner.className = 'flex flex-col';
+
+      const style = cue.style || 'broadcast';
+      const anim = isNewCue ? ' caption-animate' : '';
+
+      if (style === 'broadcast' || style === 'dark') {
+        screenCaptionBox.className = `max-w-[94%] flex items-stretch gap-3 px-4 py-2.5 rounded-2xl bg-slate-950/88 backdrop-blur-md border border-white/15 shadow-[0_10px_30px_rgba(0,0,0,0.6)] text-right${anim}`;
+        screenCaptionAccent.className = 'w-1.5 rounded-full bg-gradient-to-b from-cyan-400 to-indigo-500 shrink-0';
+        screenCaptionMain.className = 'text-sm font-extrabold text-white tracking-tight leading-snug';
+        screenCaptionSub.className = 'text-[11px] font-medium text-cyan-200/90 leading-tight mt-0.5';
+      } else if (style === 'gradient' || style === 'indigo') {
+        screenCaptionBox.className = `max-w-[94%] px-5 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-600/95 via-purple-600/95 to-pink-600/95 backdrop-blur-md border border-white/25 shadow-[0_8px_28px_rgba(99,102,241,0.45)] text-center${anim}`;
+        screenCaptionMain.className = 'text-sm font-extrabold text-white drop-shadow leading-snug';
+        screenCaptionSub.className = 'text-[11px] font-semibold text-white/90 leading-tight mt-0.5';
+      } else if (style === 'cinematic') {
+        screenCaptionBox.className = `max-w-[94%] px-4 py-2 text-center${anim}`;
+        screenCaptionInner.className = 'flex flex-col items-center';
+        screenCaptionMain.className = 'text-base font-extrabold text-white tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-snug';
+        screenCaptionDivider.className = 'w-14 h-0.5 rounded-full bg-amber-400 my-1 shadow-[0_0_10px_rgba(251,191,36,0.8)]';
+        screenCaptionSub.className = 'text-[11px] font-semibold text-amber-200 drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] leading-tight';
+      } else if (style === 'glow') {
+        screenCaptionBox.className = `max-w-[94%] px-4 py-2 text-center${anim}`;
+        screenCaptionInner.className = 'flex flex-col items-center';
+        screenCaptionMain.className = 'text-lg font-extrabold text-neon-glow tracking-wide leading-snug';
+        screenCaptionSub.className = 'text-xs font-bold text-fuchsia-200 drop-shadow-[0_0_10px_rgba(217,70,239,0.9)] leading-tight mt-0.5';
+      } else if (style === 'outline3d') {
+        screenCaptionBox.className = `max-w-[94%] px-4 py-2 text-center${anim}`;
+        screenCaptionInner.className = 'flex flex-col items-center';
+        screenCaptionMain.className = 'text-lg font-black text-3d-outline tracking-tight leading-snug';
+        screenCaptionSub.className = 'px-2.5 py-0.5 rounded-md bg-indigo-600/90 text-white text-[11px] font-bold shadow mt-1 leading-tight';
+      } else {
+        // 'reels' or 'amber'
+        screenCaptionBox.className = `max-w-[94%] flex flex-col items-center${anim}`;
+        screenCaptionInner.className = 'flex flex-col items-center gap-1';
+        screenCaptionMain.className = 'px-4 py-1.5 rounded-xl bg-amber-400 text-black text-sm font-black shadow-[0_6px_20px_rgba(251,191,36,0.45)] -rotate-1 leading-snug';
+        screenCaptionSub.className = 'px-3 py-0.5 rounded-lg bg-black/85 text-white text-[11px] font-bold border border-white/15 shadow leading-tight';
+      }
+    }
+
+    function setCueStyleSelection(style) {
+      selectedCueStyle = style;
+      capStyleBtns.forEach((b) => {
+        const active = b.dataset.style === style;
+        b.classList.toggle('border-white', active);
+        b.classList.toggle('border-cyan-400', active && style === 'broadcast');
+        b.classList.toggle('border-transparent', !active);
+      });
+    }
+
+    function resetCueForm() {
+      editingCueId = null;
+      captionMainInput.value = '';
+      captionSubInput.value = '';
+      addCueBtn.textContent = '+ הוסף כתובית לתזמון';
+      addCueBtn.className = 'mt-1 w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition';
+    }
+
+    function renderCueList() {
+      const sorted = [...captionCues].sort((a, b) => a.startSec - b.startSec);
+      if (sorted.length === 0) {
+        cueListContainer.innerHTML = '<p class="text-xs text-zinc-500 text-center py-2">אין כתוביות מתוזמנות עדיין.</p>';
+        return;
+      }
+      cueListContainer.innerHTML = '';
+      sorted.forEach((cue) => {
+        const row = document.createElement('div');
+        row.className = `flex items-center justify-between gap-2 bg-zinc-950 border rounded-xl px-3 py-2 ${
+          editingCueId === cue.id ? 'border-indigo-500' : 'border-zinc-800'
+        }`;
+
+        const info = document.createElement('div');
+        info.className = 'flex flex-col min-w-0';
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'text-[10px] font-mono text-indigo-300';
+        timeSpan.textContent = `${cue.startSec}s – ${cue.endSec}s`;
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'text-xs font-semibold text-white truncate';
+        titleSpan.textContent = cue.main;
+
+        info.appendChild(timeSpan);
+        info.appendChild(titleSpan);
+
+        const actions = document.createElement('div');
+        actions.className = 'flex items-center gap-1.5 shrink-0';
+
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'text-[11px] text-indigo-300 hover:text-indigo-200 px-2 py-1 rounded-lg bg-indigo-950/50';
+        editBtn.textContent = 'ערוך';
+        editBtn.addEventListener('click', () => {
+          editingCueId = cue.id;
+          cueStartInput.value = cue.startSec;
+          cueEndInput.value = cue.endSec;
+          captionMainInput.value = cue.main;
+          captionSubInput.value = cue.sub || '';
+          setCueStyleSelection(cue.style || 'broadcast');
+          addCueBtn.textContent = 'עדכן כתובית';
+          addCueBtn.className = 'mt-1 w-full py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-xs font-bold text-black transition';
+          renderCueList();
+          captionMainInput.focus();
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'text-[11px] text-red-400 hover:text-red-300 px-2 py-1 rounded-lg bg-red-950/40';
+        delBtn.textContent = 'מחק';
+        delBtn.addEventListener('click', () => {
+          if (editingCueId === cue.id) resetCueForm();
+          captionCues = captionCues.filter((c) => c.id !== cue.id);
+          saveCues();
+          renderCueList();
+          renderScreenCaption(isRecording ? secondsElapsed : 0);
+        });
+
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+
+        row.appendChild(info);
+        row.appendChild(actions);
+        cueListContainer.appendChild(row);
+      });
+    }
+
+    function saveCues() {
+      try {
+        localStorage.setItem('prompter_cues', JSON.stringify(captionCues));
+      } catch (e) {}
+    }
+
+    function loadSavedState() {
+      try {
+        const storedLib = localStorage.getItem('prompter_library');
+        if (storedLib) {
+          const parsedLib = JSON.parse(storedLib);
+          if (Array.isArray(parsedLib) && parsedLib.length > 0) scriptLibrary = parsedLib;
+        }
+        const storedText = localStorage.getItem('prompter_script');
+        if (storedText && storedText.trim().length > 0) rawScript = storedText;
+        const storedSpeed = Number(localStorage.getItem('prompter_speed'));
+        if (storedSpeed >= 10 && storedSpeed <= 80) scrollSpeed = storedSpeed;
+        const storedFont = Number(localStorage.getItem('prompter_font_size'));
+        if (storedFont >= 14 && storedFont <= 38) fontSize = storedFont;
+        const storedOpacity = localStorage.getItem('prompter_bg_opacity');
+        if (storedOpacity !== null && Number(storedOpacity) >= 0 && Number(storedOpacity) <= 95) {
+          bgOpacity = Number(storedOpacity);
+        }
+        const storedH = Number(localStorage.getItem('prompter_height'));
+        if (storedH >= 140 && storedH <= 300) prompterHeight = storedH;
+        const storedM = Number(localStorage.getItem('prompter_margin'));
+        if (storedM >= 12 && storedM <= 56) prompterMargin = storedM;
+        const storedLH = Number(localStorage.getItem('prompter_line_height'));
+        if (storedLH >= 1.2 && storedLH <= 2.2) prompterLineHeight = storedLH;
+        const storedFB = localStorage.getItem('prompter_focus_band');
+        if (storedFB !== null) focusBandEnabled = storedFB === 'true';
+        const storedColor = localStorage.getItem('prompter_color');
+        if (storedColor) prompterColorClass = storedColor;
+        const storedVoice = localStorage.getItem('prompter_voice_mode');
+        if (storedVoice !== null) voiceScrollEnabled = storedVoice === 'true';
+        const storedRatio = localStorage.getItem('prompter_aspect_ratio');
+        if (storedRatio === '9:16' || storedRatio === '16:9' || storedRatio === '1:1') aspectRatio = storedRatio;
+
+        const storedCapEnabled = localStorage.getItem('prompter_cap_enabled');
+        if (storedCapEnabled !== null) captionEnabled = storedCapEnabled === 'true';
+        const storedCues = localStorage.getItem('prompter_cues');
+        if (storedCues) {
+          const parsed = JSON.parse(storedCues);
+          if (Array.isArray(parsed)) captionCues = parsed;
+        }
+      } catch (e) {}
+
+      renderRichScript(rawScript);
+      speedSlider.value = scrollSpeed;
+      speedValueLabel.textContent = scrollSpeed;
+      applyFontSize();
+      applyBgOpacity();
+      applyPrompterLayout();
+      applyPrompterColor(prompterColorClass);
+      applyAspectRatio(aspectRatio);
+      updateVoiceModeUI();
+      renderScreenCaption(0);
+    }
+
+    function applyFontSize() {
+      scriptContent.style.fontSize = `${fontSize}px`;
+      fontSizeLabel.textContent = fontSize;
+    }
+
+    function applyBgOpacity() {
+      prompterBox.style.backgroundColor = `rgba(0, 0, 0, ${bgOpacity / 100})`;
+      prompterBox.style.borderColor = bgOpacity === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.15)';
+      opacitySlider.value = bgOpacity;
+      opacityValueLabel.textContent = `${bgOpacity}%`;
+    }
+
+    function applyPrompterLayout() {
+      prompterWrapper.style.height = `${prompterHeight}px`;
+      heightSlider.value = prompterHeight;
+      heightValueLabel.textContent = prompterHeight;
+
+      prompterTrack.style.paddingLeft = `${prompterMargin}px`;
+      prompterTrack.style.paddingRight = `${prompterMargin}px`;
+      marginSlider.value = prompterMargin;
+      marginValueLabel.textContent = prompterMargin;
+
+      scriptContent.style.lineHeight = String(prompterLineHeight);
+      lineHeightSlider.value = prompterLineHeight;
+      lineHeightValueLabel.textContent = prompterLineHeight.toFixed(1);
+
+      focusBand.classList.toggle('hidden', !focusBandEnabled);
+      focusBandToggle.checked = focusBandEnabled;
+    }
+
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLockSentinel = await navigator.wakeLock.request('screen');
+        } catch (e) {}
+      }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLockSentinel) {
+        wakeLockSentinel.release().catch(() => {});
+        wakeLockSentinel = null;
+      }
+    }
+
+    function saveSetting(key, value) {
+      try {
+        localStorage.setItem(key, String(value));
+      } catch (e) {}
+    }
+
+    async function initCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showDemoMode('הדפדפן או חלון התצוגה הזה לא תומך בגישה ישירה למצלמה. עדיין אפשר לבדוק את הפרומפטר והכתוביות המתוזמנות!');
+        return;
+      }
+
+      if (mediaStream) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+      }
+
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode },
+          audio: true
+        });
+        cameraPreview.srcObject = mediaStream;
+        cameraPreview.classList.remove('hidden');
+        demoBackdrop.classList.add('hidden');
+        cameraPreview.classList.toggle('mirror-video', facingMode === 'user');
+        setupAudioAnalyser(mediaStream);
+      } catch (err) {
+        showDemoMode('לא ניתנה הרשאה למצלמה בחלון זה — הפרומפטר עובד במצב הדגמה.');
+      }
+    }
+
+    function showDemoMode(message) {
+      cameraPreview.classList.add('hidden');
+      demoBackdrop.classList.remove('hidden');
+      cameraErrorMsg.textContent = message;
+    }
+
+    function getCanvasDimensions(vw, vh) {
+      if (aspectRatio === '16:9') return { w: 1280, h: 720 };
+      if (aspectRatio === '1:1') return { w: 720, h: 720 };
+      return { w: vw || 720, h: vh || 1280 };
+    }
+
+    function drawCompositeFrame() {
+      if (!isRecording) return;
+      const ctx = recordCanvas.getContext('2d');
+      const w = recordCanvas.width;
+      const h = recordCanvas.height;
+      const vw = cameraPreview.videoWidth || w;
+      const vh = cameraPreview.videoHeight || h;
+
+      // Center-crop video to match target aspect ratio
+      const targetRatio = w / h;
+      const srcRatio = vw / vh;
+      let sx = 0, sy = 0, sw = vw, sh = vh;
+      if (srcRatio > targetRatio) {
+        sw = vh * targetRatio;
+        sx = (vw - sw) / 2;
+      } else {
+        sh = vw / targetRatio;
+        sy = (vh - sh) / 2;
+      }
+
+      ctx.save();
+      if (facingMode === 'user') {
+        ctx.translate(w, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(cameraPreview, sx, sy, sw, sh, 0, 0, w, h);
+      ctx.restore();
+
+      const cue = getActiveCue(secondsElapsed);
+      if (cue) {
+        const hasSub = cue.sub && cue.sub.trim().length > 0;
+        const style = cue.style || 'broadcast';
+        const boxW = Math.min(w * 0.88, 560);
+        const boxH = hasSub ? 78 : 54;
+        const boxX = (w - boxW) / 2;
+        const boxY = h - boxH - 36;
+
+        ctx.save();
+        if (style === 'broadcast' || style === 'dark') {
+          ctx.shadowColor = 'rgba(0,0,0,0.6)';
+          ctx.shadowBlur = 18;
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.90)';
+          ctx.beginPath();
+          ctx.roundRect(boxX, boxY, boxW, boxH, 16);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+
+          ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          // Right-side cyan-indigo accent bar (RTL)
+          const barGrad = ctx.createLinearGradient(0, boxY + 10, 0, boxY + boxH - 10);
+          barGrad.addColorStop(0, '#22d3ee');
+          barGrad.addColorStop(1, '#6366f1');
+          ctx.fillStyle = barGrad;
+          ctx.beginPath();
+          ctx.roundRect(boxX + boxW - 18, boxY + 12, 6, boxH - 24, 4);
+          ctx.fill();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'right';
+          ctx.font = '800 21px Heebo, Inter, sans-serif';
+          ctx.fillText(cue.main, boxX + boxW - 30, boxY + 32, boxW - 48);
+          if (hasSub) {
+            ctx.fillStyle = '#a5f3fc';
+            ctx.font = '600 14px Heebo, Inter, sans-serif';
+            ctx.fillText(cue.sub, boxX + boxW - 30, boxY + 58, boxW - 48);
+          }
+        } else if (style === 'gradient' || style === 'indigo') {
+          const grad = ctx.createLinearGradient(boxX, boxY, boxX + boxW, boxY + boxH);
+          grad.addColorStop(0, 'rgba(79, 70, 229, 0.95)');
+          grad.addColorStop(0.5, 'rgba(147, 51, 234, 0.95)');
+          grad.addColorStop(1, 'rgba(236, 72, 153, 0.95)');
+          ctx.shadowColor = 'rgba(99,102,241,0.45)';
+          ctx.shadowBlur = 18;
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.roundRect(boxX, boxY, boxW, boxH, 16);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.font = '800 21px Heebo, Inter, sans-serif';
+          ctx.fillText(cue.main, w / 2, boxY + 32, boxW - 28);
+          if (hasSub) {
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.font = '600 14px Heebo, Inter, sans-serif';
+            ctx.fillText(cue.sub, w / 2, boxY + 58, boxW - 28);
+          }
+        } else if (style === 'cinematic') {
+          ctx.textAlign = 'center';
+          ctx.shadowColor = 'rgba(0,0,0,0.95)';
+          ctx.shadowBlur = 12;
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 24px Heebo, Inter, sans-serif';
+          ctx.fillText(cue.main, w / 2, boxY + 28, boxW);
+          ctx.shadowBlur = 0;
+
+          ctx.fillStyle = '#fbbf24';
+          ctx.beginPath();
+          ctx.roundRect(w / 2 - 36, boxY + 38, 72, 3, 2);
+          ctx.fill();
+
+          if (hasSub) {
+            ctx.shadowColor = 'rgba(0,0,0,0.95)';
+            ctx.shadowBlur = 8;
+            ctx.fillStyle = '#fde68a';
+            ctx.font = '600 15px Heebo, Inter, sans-serif';
+            ctx.fillText(cue.sub, w / 2, boxY + 62, boxW);
+          }
+        } else if (style === 'glow') {
+          ctx.textAlign = 'center';
+          ctx.font = '800 26px Heebo, Inter, sans-serif';
+          ctx.shadowColor = '#a855f7';
+          ctx.shadowBlur = 24;
+          ctx.fillStyle = '#f0f9ff';
+          ctx.fillText(cue.main, w / 2, boxY + 28, boxW);
+          ctx.shadowColor = '#22d3ee';
+          ctx.shadowBlur = 12;
+          ctx.fillText(cue.main, w / 2, boxY + 28, boxW);
+          if (hasSub) {
+            ctx.shadowColor = '#d946ef';
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = '#f5d0fe';
+            ctx.font = '700 15px Heebo, Inter, sans-serif';
+            ctx.fillText(cue.sub, w / 2, boxY + 56, boxW);
+          }
+        } else if (style === 'outline3d') {
+          ctx.textAlign = 'center';
+          ctx.font = '900 26px Heebo, Inter, sans-serif';
+          // 3D indigo offset shadow
+          ctx.fillStyle = '#4f46e5';
+          ctx.fillText(cue.main, w / 2 + 3, boxY + 31, boxW);
+          // Dark outline + crisp white fill
+          ctx.lineWidth = 5;
+          ctx.strokeStyle = '#09090b';
+          ctx.strokeText(cue.main, w / 2, boxY + 28, boxW);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(cue.main, w / 2, boxY + 28, boxW);
+          if (hasSub) {
+            ctx.fillStyle = 'rgba(79, 70, 229, 0.92)';
+            ctx.beginPath();
+            ctx.roundRect(w / 2 - (boxW * 0.65) / 2, boxY + 42, boxW * 0.65, 24, 6);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '700 13px Heebo, Inter, sans-serif';
+            ctx.fillText(cue.sub, w / 2, boxY + 59, boxW * 0.6);
+          }
+        } else {
+          // Reels bold pill
+          ctx.translate(w / 2, boxY + 24);
+          ctx.rotate(-0.025);
+          ctx.fillStyle = '#fbbf24';
+          ctx.shadowColor = 'rgba(0,0,0,0.45)';
+          ctx.shadowBlur = 14;
+          ctx.beginPath();
+          ctx.roundRect(-boxW / 2, -20, boxW, 40, 12);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'center';
+          ctx.font = '800 20px Heebo, Inter, sans-serif';
+          ctx.fillText(cue.main, 0, 7, boxW - 24);
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+          if (hasSub) {
+            ctx.fillStyle = 'rgba(0,0,0,0.85)';
+            ctx.beginPath();
+            ctx.roundRect(w / 2 - (boxW * 0.72) / 2, boxY + 50, boxW * 0.72, 26, 8);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.font = '700 13px Heebo, Inter, sans-serif';
+            ctx.fillText(cue.sub, w / 2, boxY + 67, boxW * 0.68);
+          }
+        }
+        ctx.restore();
+      }
+
+      canvasDrawId = requestAnimationFrame(drawCompositeFrame);
+    }
+
+    function scrollStep(timestamp) {
+      if (!isRecording || isScrollPaused) return;
+
+      let shouldAdvance = true;
+      if (voiceScrollEnabled) {
+        detectVoiceActivity(timestamp);
+        shouldAdvance = isSpeakingNow;
+      }
+
+      if (lastFrameTime !== null && shouldAdvance) {
+        const deltaSec = (timestamp - lastFrameTime) / 1000;
+        scrollY = Math.min(getMaxScrollY(), scrollY + scrollSpeed * deltaSec);
+        prompterTrack.style.transform = `translateY(-${scrollY}px)`;
+        syncProgressUI();
+      }
+      lastFrameTime = timestamp;
+      scrollAnimId = requestAnimationFrame(scrollStep);
+    }
+
+    function updateTimerDisplay() {
+      const mins = String(Math.floor(secondsElapsed / 60)).padStart(2, '0');
+      const secs = String(secondsElapsed % 60).padStart(2, '0');
+      timerText.textContent = `${mins}:${secs}`;
+    }
+
+    function startCountdown() {
+      isCountingDown = true;
+      let count = 3;
+      countdownNumber.textContent = count;
+      countdownOverlay.classList.remove('hidden');
+      switchCamBtn.disabled = true;
+      aspectBtn.disabled = true;
+      statusHint.textContent = 'ספירה לאחור... לחץ שוב לביטול';
+
+      clearInterval(countdownInterval);
+      countdownInterval = setInterval(() => {
+        count -= 1;
+        if (count > 0) {
+          countdownNumber.textContent = count;
+        } else {
+          clearInterval(countdownInterval);
+          isCountingDown = false;
+          countdownOverlay.classList.add('hidden');
+          beginRecordingNow();
+        }
+      }, 1000);
+    }
+
+    function cancelCountdown() {
+      clearInterval(countdownInterval);
+      isCountingDown = false;
+      countdownOverlay.classList.add('hidden');
+      switchCamBtn.disabled = false;
+      aspectBtn.disabled = false;
+      statusHint.textContent = 'לחץ על הכפתור האדום לספירה לאחור והתחלת צילום';
+    }
+
+    function beginRecordingNow() {
+      // Auto-collapse settings drawer for a clean recording view
+      setSettingsDrawerOpen(false);
+      studioMenuModal.classList.add('hidden');
+      isRecording = true;
+      tapPauseBadge.classList.add('hidden');
+      requestWakeLock();
+      isScrollPaused = false;
+      isSpeakingNow = false;
+      lastSpeechTimestamp = 0;
+      downloadArea.classList.add('hidden');
+      recordedChunks = [];
+
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+      if (voiceScrollEnabled) {
+        startSpeechRecognition();
+      }
+      updateVoiceModeUI();
+
+      if (mediaStream && typeof MediaRecorder !== 'undefined') {
+        try {
+          let streamToRecord = mediaStream;
+          if (typeof recordCanvas.captureStream === 'function' && cameraPreview.videoWidth > 0) {
+            const dims = getCanvasDimensions(cameraPreview.videoWidth, cameraPreview.videoHeight);
+            recordCanvas.width = dims.w;
+            recordCanvas.height = dims.h;
+            drawCompositeFrame();
+            const canvasStream = recordCanvas.captureStream(30);
+            const audioTracks = mediaStream.getAudioTracks();
+            if (audioTracks.length > 0) {
+              canvasStream.addTrack(audioTracks[0]);
+            }
+            streamToRecord = canvasStream;
+          }
+
+          mediaRecorder = new MediaRecorder(streamToRecord);
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data && event.data.size > 0) {
+              recordedChunks.push(event.data);
+            }
+          };
+          mediaRecorder.onstop = () => {
+            if (recordedChunks.length > 0) {
+              const blob = new Blob(recordedChunks, { type: 'video/webm' });
+              lastVideoUrl = URL.createObjectURL(blob);
+              takeCounter += 1;
+              const now = new Date();
+              const timeStr = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+              savedTakes.push({
+                id: Date.now(),
+                number: takeCounter,
+                durationSec: secondsElapsed,
+                timeStr,
+                ratio: aspectRatio,
+                url: lastVideoUrl
+              });
+              updateTakesBadge();
+              downloadLink.href = lastVideoUrl;
+              downloadLink.download = `take-${takeCounter}.webm`;
+              downloadArea.classList.remove('hidden');
+            }
+          };
+          mediaRecorder.start();
+        } catch (e) {}
+      }
+
+      recordIcon.classList.remove('w-14', 'h-14', 'rounded-full');
+      recordIcon.classList.add('w-7', 'h-7', 'rounded-md');
+      recDot.classList.remove('bg-zinc-500');
+      recDot.classList.add('bg-red-500', 'animate-pulse');
+      pauseScrollBtn.disabled = false;
+      pauseScrollBtn.textContent = 'השהה';
+      statusHint.textContent = voiceScrollEnabled
+        ? 'מצב קולי פעיל — דבר כדי לגלול'
+        : 'מקליט וגולל... לחץ שוב לעצירה';
+
+      secondsElapsed = 0;
+      updateTimerDisplay();
+      renderScreenCaption(secondsElapsed);
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        secondsElapsed += 1;
+        updateTimerDisplay();
+        renderScreenCaption(secondsElapsed);
+      }, 1000);
+
+      lastFrameTime = null;
+      cancelAnimationFrame(scrollAnimId);
+      scrollAnimId = requestAnimationFrame(scrollStep);
+    }
+
+    function stopRecording() {
+      isRecording = false;
+      tapPauseBadge.classList.add('hidden');
+      releaseWakeLock();
+      isScrollPaused = false;
+      isSpeakingNow = false;
+      stopSpeechRecognition();
+      cancelAnimationFrame(scrollAnimId);
+      cancelAnimationFrame(canvasDrawId);
+      clearInterval(timerInterval);
+
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+
+      recordIcon.classList.remove('w-7', 'h-7', 'rounded-md');
+      recordIcon.classList.add('w-14', 'h-14', 'rounded-full');
+      recDot.classList.remove('bg-red-500', 'animate-pulse');
+      recDot.classList.add('bg-zinc-500');
+      switchCamBtn.disabled = false;
+      aspectBtn.disabled = false;
+      pauseScrollBtn.disabled = true;
+      pauseScrollBtn.textContent = 'השהה';
+      statusHint.textContent = 'לחץ על הכפתור האדום לספירה לאחור והתחלת צילום';
+      updateVoiceModeUI();
+      renderScreenCaption(0);
+    }
+
+    function getMaxScrollY() {
+      const total = prompterTrack.scrollHeight - prompterBox.clientHeight;
+      return Math.max(100, total);
+    }
+
+    function syncProgressUI() {
+      const maxScroll = getMaxScrollY();
+      const pct = Math.min(100, Math.max(0, Math.round((scrollY / maxScroll) * 100)));
+      progressScrubber.value = pct;
+      progressPercentLabel.textContent = `${pct}%`;
+    }
+
+    function resetScroll() {
+      scrollY = 0;
+      lastFrameTime = null;
+      prompterTrack.style.transform = 'translateY(0px)';
+      syncProgressUI();
+    }
+
+    function formatDuration(sec) {
+      const m = String(Math.floor(sec / 60)).padStart(2, '0');
+      const s = String(sec % 60).padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    function updateTakesBadge() {
+      takesBtn.textContent = `טייקים (${savedTakes.length})`;
+    }
+
+    function renderTakesList() {
+      if (savedTakes.length === 0) {
+        takesListContainer.innerHTML = '<p class="text-xs text-zinc-400 text-center py-6">עדיין לא צולמו טייקים בסשן זה. לחץ על הכפתור האדום כדי לצלם טייק ראשון!</p>';
+        return;
+      }
+      takesListContainer.innerHTML = '';
+      [...savedTakes].reverse().forEach((take) => {
+        const card = document.createElement('div');
+        card.className = 'flex items-center justify-between gap-2 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5';
+
+        const info = document.createElement('div');
+        info.className = 'flex flex-col min-w-0';
+        const title = document.createElement('span');
+        title.className = 'text-xs font-bold text-white';
+        title.textContent = `טייק #${take.number} • ${formatDuration(take.durationSec)}`;
+        const meta = document.createElement('span');
+        meta.className = 'text-[10px] text-zinc-400';
+        meta.textContent = `${take.timeStr} | יחס ${take.ratio}`;
+        info.appendChild(title);
+        info.appendChild(meta);
+
+        const btns = document.createElement('div');
+        btns.className = 'flex items-center gap-1.5 shrink-0';
+
+        const watchBtn = document.createElement('button');
+        watchBtn.type = 'button';
+        watchBtn.className = 'px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-[11px] font-semibold text-white';
+        watchBtn.textContent = 'צפה';
+        watchBtn.addEventListener('click', () => {
+          takesModal.classList.add('hidden');
+          recordedVideoPlayer.src = take.url;
+          videoPreviewModal.classList.remove('hidden');
+        });
+
+        const dlBtn = document.createElement('a');
+        dlBtn.href = take.url;
+        dlBtn.download = `take-${take.number}.webm`;
+        dlBtn.className = 'px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[11px] font-bold text-black';
+        dlBtn.textContent = 'הורד';
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'px-2 py-1 rounded-lg bg-red-950/50 hover:bg-red-900/60 text-[11px] text-red-300';
+        delBtn.textContent = 'מחק';
+        delBtn.addEventListener('click', () => {
+          URL.revokeObjectURL(take.url);
+          savedTakes = savedTakes.filter((t) => t.id !== take.id);
+          updateTakesBadge();
+          renderTakesList();
+        });
+
+        btns.appendChild(watchBtn);
+        btns.appendChild(dlBtn);
+        btns.appendChild(delBtn);
+
+        card.appendChild(info);
+        card.appendChild(btns);
+        takesListContainer.appendChild(card);
+      });
+    }
+
+    function wrapSelection(marker) {
+      const start = scriptInput.selectionStart;
+      const end = scriptInput.selectionEnd;
+      const val = scriptInput.value;
+      const selected = val.slice(start, end) || 'טקסט מודגש';
+      const replacement = `${marker}${selected}${marker}`;
+      scriptInput.value = val.slice(0, start) + replacement + val.slice(end);
+      scriptInput.focus();
+      scriptInput.setSelectionRange(start + marker.length, start + marker.length + selected.length);
+    }
+
+    // Event Listeners
+    aspectBtn.addEventListener('click', () => {
+      if (isRecording || isCountingDown) return;
+      const order = ['9:16', '16:9', '1:1'];
+      const next = order[(order.indexOf(aspectRatio) + 1) % order.length];
+      applyAspectRatio(next);
+      saveSetting('prompter_aspect_ratio', next);
+    });
+
+    voiceSensSlider.addEventListener('input', (e) => {
+      voiceThreshold = Number(e.target.value);
+    });
+
+    voiceModeBtn.addEventListener('click', () => {
+      ensureAudioUnlocked();
+      voiceScrollEnabled = !voiceScrollEnabled;
+      saveSetting('prompter_voice_mode', voiceScrollEnabled);
+      if (isRecording) {
+        if (voiceScrollEnabled) startSpeechRecognition();
+        else stopSpeechRecognition();
+      }
+      updateVoiceModeUI();
+    });
+
+    recordBtn.addEventListener('click', () => {
+      ensureAudioUnlocked();
+      if (isCountingDown) cancelCountdown();
+      else if (isRecording) stopRecording();
+      else startCountdown();
+    });
+
+    function toggleScrollPause() {
+      if (!isRecording) return;
+      isScrollPaused = !isScrollPaused;
+      tapPauseBadge.classList.toggle('hidden', !isScrollPaused);
+      if (isScrollPaused) {
+        cancelAnimationFrame(scrollAnimId);
+        pauseScrollBtn.textContent = 'המשך';
+        statusHint.textContent = 'הגלילה מושהית (ההקלטה ממשיכה)';
+      } else {
+        lastFrameTime = null;
+        scrollAnimId = requestAnimationFrame(scrollStep);
+        pauseScrollBtn.textContent = 'השהה';
+        statusHint.textContent = voiceScrollEnabled
+          ? 'מצב קולי פעיל — דבר כדי לגלול'
+          : 'מקליט וגולל... לחץ שוב לעצירה';
+      }
+    }
+
+    pauseScrollBtn.addEventListener('click', toggleScrollPause);
+    prompterBox.addEventListener('click', toggleScrollPause);
+
+    switchCamBtn.addEventListener('click', () => {
+      if (isRecording || isCountingDown) return;
+      facingMode = facingMode === 'user' ? 'environment' : 'user';
+      initCamera();
+    });
+
+    resetBtn.addEventListener('click', resetScroll);
+
+    progressScrubber.addEventListener('input', (e) => {
+      const pct = Number(e.target.value);
+      scrollY = (pct / 100) * getMaxScrollY();
+      lastFrameTime = null;
+      prompterTrack.style.transform = `translateY(-${scrollY}px)`;
+      progressPercentLabel.textContent = `${pct}%`;
+    });
+
+    takesBtn.addEventListener('click', () => {
+      renderTakesList();
+      takesModal.classList.remove('hidden');
+    });
+
+    closeTakesModalBtn.addEventListener('click', () => {
+      takesModal.classList.add('hidden');
+    });
+
+    function setSettingsDrawerOpen(open) {
+      settingsDrawer.classList.toggle('hidden', !open);
+      toggleSettingsBtn.textContent = open ? 'סגור הגדרות' : 'הגדרות';
+      toggleSettingsBtn.classList.toggle('bg-indigo-600', open);
+      toggleSettingsBtn.classList.toggle('text-white', open);
+      toggleSettingsBtn.classList.toggle('border-indigo-400', open);
+    }
+
+    toggleSettingsBtn.addEventListener('click', () => {
+      const isCurrentlyOpen = !settingsDrawer.classList.contains('hidden');
+      setSettingsDrawerOpen(!isCurrentlyOpen);
+    });
+
+    closeSettingsDrawerBtn.addEventListener('click', () => {
+      setSettingsDrawerOpen(false);
+    });
+
+    toggleGridBtn.addEventListener('click', () => {
+      const active = framingGrid.classList.contains('hidden');
+      framingGrid.classList.toggle('hidden', !active);
+      toggleGridBtn.classList.toggle('bg-cyan-500', active);
+      toggleGridBtn.classList.toggle('text-black', active);
+    });
+
+    toggleLightBtn.addEventListener('click', () => {
+      const active = lightRingOverlay.classList.contains('hidden');
+      lightRingOverlay.classList.toggle('hidden', !active);
+      toggleLightBtn.classList.toggle('bg-amber-400', active);
+      toggleLightBtn.classList.toggle('text-black', active);
+    });
+    retryCameraBtn.addEventListener('click', initCamera);
+
+    speedSlider.addEventListener('input', (e) => {
+      scrollSpeed = Number(e.target.value);
+      speedValueLabel.textContent = scrollSpeed;
+      saveSetting('prompter_speed', scrollSpeed);
+    });
+
+    opacitySlider.addEventListener('input', (e) => {
+      bgOpacity = Number(e.target.value);
+      applyBgOpacity();
+      saveSetting('prompter_bg_opacity', bgOpacity);
+    });
+
+    heightSlider.addEventListener('input', (e) => {
+      prompterHeight = Number(e.target.value);
+      applyPrompterLayout();
+      syncProgressUI();
+      saveSetting('prompter_height', prompterHeight);
+    });
+
+    marginSlider.addEventListener('input', (e) => {
+      prompterMargin = Number(e.target.value);
+      applyPrompterLayout();
+      syncProgressUI();
+      saveSetting('prompter_margin', prompterMargin);
+    });
+
+    lineHeightSlider.addEventListener('input', (e) => {
+      prompterLineHeight = Number(e.target.value);
+      applyPrompterLayout();
+      syncProgressUI();
+      saveSetting('prompter_line_height', prompterLineHeight);
+    });
+
+    focusBandToggle.addEventListener('change', (e) => {
+      focusBandEnabled = e.target.checked;
+      applyPrompterLayout();
+      saveSetting('prompter_focus_band', focusBandEnabled);
+    });
+
+    studioMenuBtn.addEventListener('click', () => {
+      studioMenuModal.classList.remove('hidden');
+    });
+
+    closeStudioMenuBtn.addEventListener('click', () => {
+      studioMenuModal.classList.add('hidden');
+    });
+
+    // Close studio menu when opening sub-modals from inside it
+    [editScriptBtn, captionBtn, takesBtn].forEach((btn) => {
+      btn.addEventListener('click', () => {
+        studioMenuModal.classList.add('hidden');
+      });
+    });
+
+    fontDownBtn.addEventListener('click', () => {
+      if (fontSize > 14) {
+        fontSize -= 2;
+        applyFontSize();
+        saveSetting('prompter_font_size', fontSize);
+      }
+    });
+
+    fontUpBtn.addEventListener('click', () => {
+      if (fontSize < 38) {
+        fontSize += 2;
+        applyFontSize();
+        saveSetting('prompter_font_size', fontSize);
+      }
+    });
+
+    colorDots.forEach((dot) => {
+      dot.addEventListener('click', () => {
+        applyPrompterColor(dot.dataset.color);
+        saveSetting('prompter_color', dot.dataset.color);
+      });
+    });
+
+    // Script & Library Modal Events
+    editScriptBtn.addEventListener('click', () => {
+      scriptInput.value = rawScript;
+      const current = scriptLibrary.find((s) => s.id === activeScriptId);
+      scriptTitleInput.value = current ? current.title : 'תסריט חדש';
+      renderScriptLibrary();
+      scriptModal.classList.remove('hidden');
+      scriptInput.focus();
+    });
+
+    function closeScriptModal() {
+      scriptModal.classList.add('hidden');
+    }
+
+    saveAsNewBtn.addEventListener('click', () => {
+      const content = scriptInput.value.trim();
+      const title = scriptTitleInput.value.trim() || `תסריט ${scriptLibrary.length + 1}`;
+      if (!content) return;
+      const newId = Date.now();
+      scriptLibrary.push({ id: newId, title, content });
+      activeScriptId = newId;
+      saveLibrary();
+      renderScriptLibrary();
+    });
+
+    formatBoldBtn.addEventListener('click', () => wrapSelection('**'));
+    formatHighlightBtn.addEventListener('click', () => wrapSelection('=='));
+    closeModalBtn.addEventListener('click', closeScriptModal);
+    cancelScriptBtn.addEventListener('click', closeScriptModal);
+    clearScriptBtn.addEventListener('click', () => {
+      scriptInput.value = '';
+      scriptInput.focus();
+    });
+
+    saveScriptBtn.addEventListener('click', () => {
+      const newText = scriptInput.value.trim();
+      const newTitle = scriptTitleInput.value.trim();
+      if (newText.length > 0) {
+        rawScript = newText;
+        const idx = scriptLibrary.findIndex((s) => s.id === activeScriptId);
+        if (idx >= 0) {
+          scriptLibrary[idx].content = newText;
+          if (newTitle) scriptLibrary[idx].title = newTitle;
+          saveLibrary();
+        }
+        renderRichScript(rawScript);
+        saveSetting('prompter_script', rawScript);
+        resetScroll();
+      }
+      closeScriptModal();
+    });
+
+    // Timed Captions Modal Events
+    captionBtn.addEventListener('click', () => {
+      captionToggle.checked = captionEnabled;
+      renderCueList();
+      captionModal.classList.remove('hidden');
+    });
+
+    capStyleBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        setCueStyleSelection(btn.dataset.style);
+      });
+    });
+
+    addCueBtn.addEventListener('click', () => {
+      const startSec = Math.max(0, Number(cueStartInput.value) || 0);
+      const endSec = Math.max(startSec + 1, Number(cueEndInput.value) || startSec + 3);
+      const main = captionMainInput.value.trim();
+      const sub = captionSubInput.value.trim();
+      if (!main) return;
+
+      if (editingCueId !== null) {
+        const idx = captionCues.findIndex((c) => c.id === editingCueId);
+        if (idx >= 0) {
+          captionCues[idx] = {
+            ...captionCues[idx],
+            startSec,
+            endSec,
+            main,
+            sub,
+            style: selectedCueStyle
+          };
+        }
+        resetCueForm();
+      } else {
+        captionCues.push({
+          id: Date.now(),
+          startSec,
+          endSec,
+          main,
+          sub,
+          style: selectedCueStyle
+        });
+        captionMainInput.value = '';
+        captionSubInput.value = '';
+        cueStartInput.value = endSec + 1;
+        cueEndInput.value = endSec + 5;
+      }
+
+      saveCues();
+      renderCueList();
+      renderScreenCaption(isRecording ? secondsElapsed : 0);
+    });
+
+    function closeCapModal() {
+      captionEnabled = captionToggle.checked;
+      saveSetting('prompter_cap_enabled', captionEnabled);
+      renderScreenCaption(isRecording ? secondsElapsed : 0);
+      captionModal.classList.add('hidden');
+    }
+
+    closeCaptionModalBtn.addEventListener('click', closeCapModal);
+    saveCaptionBtn.addEventListener('click', closeCapModal);
+
+    // Video Preview Modal
+    previewVideoBtn.addEventListener('click', () => {
+      if (!lastVideoUrl) return;
+      recordedVideoPlayer.src = lastVideoUrl;
+      videoPreviewModal.classList.remove('hidden');
+    });
+
+    closeVideoModalBtn.addEventListener('click', () => {
+      recordedVideoPlayer.pause();
+      videoPreviewModal.classList.add('hidden');
+    });
+
+    // Initialize App
+    loadSavedState();
+    window.addEventListener('load', initCamera);
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>

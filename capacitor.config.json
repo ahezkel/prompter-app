@@ -1,0 +1,8 @@
+{
+  "appId": "com.prompter.studio",
+  "appName": "Prompter Studio",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

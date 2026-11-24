@@ -1,0 +1,19 @@
+{
+  "name": "פרומפטר חכם",
+  "short_name": "פרומפטר",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "lang": "he",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
