@@ -25,12 +25,12 @@
       -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%);
       mask-image: linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%);
     }
-    @keyframes captionPopIn {
-      0% { opacity: 0; transform: translateY(10px) scale(0.97); }
-      100% { opacity: 1; transform: translateY(0) scale(1); }
+    @keyframes captionFadeIn {
+      0% { opacity: 0; }
+      100% { opacity: 1; }
     }
     .caption-animate {
-      animation: captionPopIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      animation: captionFadeIn 0.2s ease-out forwards;
     }
     .text-neon-glow {
       color: #f0f9ff;
@@ -41,9 +41,14 @@
       -webkit-text-stroke: 1.5px #09090b;
       text-shadow: 0 3px 0 #09090b, 3px 3px 0 #4f46e5, 0 6px 14px rgba(0, 0, 0, 0.85);
     }
+    @media (orientation: landscape) {
+      #prompterWrapper {
+        max-height: 36vh;
+      }
+    }
   </style>
   <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#09090b" />
+  <meta name="theme-color" content="#261420" />
   <link rel="icon" type="image/png" href="icon-512.png" />
 </head>
 <body class="h-screen w-screen flex items-center justify-center bg-zinc-950">
@@ -55,6 +60,7 @@
     <div id="cameraStage" class="absolute inset-0 flex items-center justify-center bg-black pointer-events-none">
       <div id="aspectFrame" class="relative w-full h-full overflow-hidden transition-all duration-300">
         <video id="cameraPreview" autoplay playsinline muted class="w-full h-full object-cover mirror-video"></video>
+        <canvas id="bgPreviewCanvas" class="hidden absolute inset-0 w-full h-full object-cover"></canvas>
       </div>
     </div>
     <canvas id="recordCanvas" class="hidden"></canvas>
@@ -75,6 +81,9 @@
         <div></div>
       </div>
     </div>
+
+    <!-- Full-Width Bottom Gradual White Fade (for Executive Gold Caption) -->
+    <div id="screenBottomFade" class="hidden absolute inset-x-0 bottom-0 h-72 z-10 pointer-events-none transition-opacity duration-300" style="background: linear-gradient(to top, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.68) 45%, rgba(255,255,255,0) 100%);"></div>
 
     <!-- Screen Light Ring Overlay -->
     <div id="lightRingOverlay" class="hidden absolute inset-0 z-30 pointer-events-none rounded-[inherit] ring-[14px] ring-inset ring-white/85 shadow-[inset_0_0_60px_rgba(255,255,255,0.75)]"></div>
@@ -129,8 +138,13 @@
     <!-- Spacer -->
     <div class="flex-1"></div>
 
+    <!-- 3a. On-Screen Brand Logo Overlay (top-right corner, clear of bottom captions) -->
+    <div id="screenLogoContainer" class="absolute top-11 left-3 right-3 z-20 flex justify-start pointer-events-none">
+      <img id="screenLogoImg" alt="לוגו מותג" class="hidden object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.75)] rounded-lg" style="width: 72px; opacity: 0.9;" />
+    </div>
+
     <!-- 3b. On-Screen Pro Broadcast Timed Caption -->
-    <div id="screenCaptionContainer" class="relative z-10 px-4 mb-2.5 flex justify-center pointer-events-none">
+    <div id="screenCaptionContainer" class="relative z-10 pr-[15%] pl-[6%] mb-5 flex justify-center pointer-events-none">
       <div id="screenCaptionBox" class="hidden max-w-[94%] transition-all duration-200">
         <div id="screenCaptionAccent" class="hidden"></div>
         <div id="screenCaptionInner" class="flex flex-col">
@@ -244,6 +258,12 @@
       <label class="w-full bg-zinc-900/85 border border-white/10 rounded-2xl px-3.5 py-1.5 backdrop-blur-md flex items-center justify-between cursor-pointer">
         <span class="text-[11px] text-zinc-200 font-semibold">פס מיקוד לשורה הפעילה</span>
         <input id="focusBandToggle" type="checkbox" checked class="w-4 h-4 accent-indigo-500" />
+      </label>
+
+      <!-- Bluetooth Remote Toggle -->
+      <label class="w-full bg-zinc-900/85 border border-white/10 rounded-2xl px-3.5 py-1.5 backdrop-blur-md flex items-center justify-between cursor-pointer">
+        <span class="text-[11px] text-zinc-200 font-semibold">שליטה משלט בלוטות׳ (צילום ומהירות)</span>
+        <input id="remoteToggle" type="checkbox" checked class="w-4 h-4 accent-emerald-500" />
       </label>
       </div>
 
@@ -366,6 +386,9 @@
             <button type="button" data-style="outline3d" class="cap-style-btn py-2 px-2 rounded-lg bg-zinc-900 text-[11px] font-black text-3d-outline border-2 border-transparent">
               קו מתאר 3D
             </button>
+            <button type="button" data-style="gold" class="col-span-2 cap-style-btn py-2 px-2 rounded-lg bg-gradient-to-b from-stone-100 to-stone-200 text-[11px] font-bold text-zinc-900 border-2 border-amber-600/70">
+              מסגרת זהב יוקרתית (כמו בסרטון)
+            </button>
           </div>
 
           <button id="addCueBtn" type="button" class="mt-1 w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition">
@@ -407,8 +430,115 @@
           </button>
         </div>
 
-        <button id="aspectBtn" type="button" class="w-full py-2 px-3 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/70 text-xs font-mono font-bold text-cyan-200 border border-cyan-400/30 transition active:scale-95 disabled:opacity-40">
-          יחס צילום: 9:16
+        <div class="grid grid-cols-2 gap-2">
+          <button id="aspectBtn" type="button" class="py-2 px-3 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/70 text-xs font-mono font-bold text-cyan-200 border border-cyan-400/30 transition active:scale-95 disabled:opacity-40">
+            יחס צילום: 9:16
+          </button>
+          <button id="logoMenuBtn" type="button" class="py-2 px-3 rounded-xl bg-fuchsia-600/25 hover:bg-fuchsia-600/40 text-xs font-bold text-fuchsia-200 border border-fuchsia-400/35 transition active:scale-95">
+            לוגו מותג
+          </button>
+        </div>
+        <button id="bgMenuBtn" type="button" class="w-full py-2 px-3 rounded-xl bg-teal-600/25 hover:bg-teal-600/40 text-xs font-bold text-teal-200 border border-teal-400/35 transition active:scale-95">
+          רקע וירטואלי (טשטוש / תמונה / מסך ירוק)
+        </button>
+      </div>
+    </div>
+
+    <!-- 6c. Brand Logo Modal -->
+    <div id="logoModal" class="hidden absolute inset-0 z-30 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="w-full bg-zinc-900 border border-zinc-700 rounded-2xl p-4 flex flex-col gap-3 shadow-2xl">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">לוגו מותג בפינה למעלה</h2>
+          <button id="closeLogoModalBtn" type="button" class="text-xs text-zinc-400 hover:text-white px-2 py-1">סגור</button>
+        </div>
+
+        <label class="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 cursor-pointer">
+          <span class="text-xs font-semibold text-zinc-200">הצג לוגו על המסך (ונצרב בווידאו)</span>
+          <input id="logoToggle" type="checkbox" class="w-4 h-4 accent-fuchsia-500" />
+        </label>
+
+        <div class="flex items-center gap-2">
+          <label class="flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white text-center cursor-pointer transition">
+            בחר תמונת לוגו מהמכשיר
+            <input id="logoFileInput" type="file" accept="image/*" class="hidden" />
+          </label>
+          <button id="removeLogoBtn" type="button" class="px-3 py-2.5 rounded-xl bg-red-950/60 hover:bg-red-900/70 text-xs font-semibold text-red-300 border border-red-500/30 transition">
+            הסר
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 bg-zinc-950/80 border border-zinc-800 rounded-xl p-3">
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center justify-between text-[11px] text-zinc-300">
+              <span>גודל לוגו</span>
+              <span id="logoSizeLabel" class="font-mono text-fuchsia-300">72px</span>
+            </div>
+            <input id="logoSizeSlider" type="range" min="36" max="150" value="72" class="w-full accent-fuchsia-400 h-1.5 bg-zinc-700 rounded-lg cursor-pointer" />
+          </div>
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center justify-between text-[11px] text-zinc-300">
+              <span>שקיפות</span>
+              <span id="logoOpacityLabel" class="font-mono text-fuchsia-300">90%</span>
+            </div>
+            <input id="logoOpacitySlider" type="range" min="30" max="100" value="90" class="w-full accent-fuchsia-400 h-1.5 bg-zinc-700 rounded-lg cursor-pointer" />
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs text-zinc-300">מיקום בחלק העליון:</span>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" data-pos="right" class="logo-pos-btn py-1.5 rounded-xl bg-zinc-800 text-xs font-bold text-white border-2 border-fuchsia-400">ימין</button>
+            <button type="button" data-pos="center" class="logo-pos-btn py-1.5 rounded-xl bg-zinc-800 text-xs font-bold text-white border-2 border-transparent">מרכז</button>
+            <button type="button" data-pos="left" class="logo-pos-btn py-1.5 rounded-xl bg-zinc-800 text-xs font-bold text-white border-2 border-transparent">שמאל</button>
+          </div>
+        </div>
+
+        <button id="saveLogoModalBtn" type="button" class="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition">
+          שמור וסגור
+        </button>
+      </div>
+    </div>
+
+    <!-- 6d. Virtual Background Modal -->
+    <div id="bgModal" class="hidden absolute inset-0 z-30 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="w-full max-h-[88vh] bg-zinc-900 border border-zinc-700 rounded-2xl p-4 flex flex-col gap-3 shadow-2xl overflow-y-auto">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">רקע וירטואלי לצילום</h2>
+          <button id="closeBgModalBtn" type="button" class="text-xs text-zinc-400 hover:text-white px-2 py-1">סגור</button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" data-bgmode="none" class="bg-mode-btn py-2 px-2 rounded-xl bg-zinc-800 text-xs font-bold text-white border-2 border-teal-400">ללא (מקורי)</button>
+          <button type="button" data-bgmode="blur" class="bg-mode-btn py-2 px-2 rounded-xl bg-zinc-800 text-xs font-bold text-white border-2 border-transparent">טשטוש רקע (AI)</button>
+          <button type="button" data-bgmode="image" class="bg-mode-btn py-2 px-2 rounded-xl bg-zinc-800 text-xs font-bold text-white border-2 border-transparent">החלפת רקע (AI)</button>
+          <button type="button" data-bgmode="greenscreen" class="bg-mode-btn py-2 px-2 rounded-xl bg-emerald-950/60 text-xs font-bold text-emerald-200 border-2 border-transparent">מסך ירוק (מהיר)</button>
+        </div>
+
+        <p id="bgStatusNote" class="text-[11px] text-zinc-400 leading-relaxed">בחר מצב רקע. מצבי AI פועלים בצורה מיטבית בתאורה טובה.</p>
+
+        <!-- Custom Background Image Upload & Presets -->
+        <div id="bgImageControls" class="hidden flex flex-col gap-2 bg-zinc-950/80 border border-zinc-800 rounded-xl p-3">
+          <label class="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white text-center cursor-pointer transition">
+            העלה תמונת משרד / רקע מהמכשיר
+            <input id="bgFileInput" type="file" accept="image/*" class="hidden" />
+          </label>
+          <div class="grid grid-cols-2 gap-2">
+            <button id="bgPresetDarkBtn" type="button" class="py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[11px] font-semibold text-zinc-200 border border-white/10">רקע פחם משרדי</button>
+            <button id="bgPresetNavyBtn" type="button" class="py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-[11px] font-semibold text-cyan-200 border border-cyan-400/20">רקע כחול יוקרתי</button>
+          </div>
+        </div>
+
+        <!-- Chroma Key Sensitivity (only for greenscreen mode) -->
+        <div id="chromaControls" class="hidden flex flex-col gap-1 bg-zinc-950/80 border border-zinc-800 rounded-xl p-3">
+          <div class="flex items-center justify-between text-[11px] text-zinc-300">
+            <span>רגישות מסך ירוק</span>
+            <span id="chromaValLabel" class="font-mono text-emerald-300">45</span>
+          </div>
+          <input id="chromaSlider" type="range" min="15" max="90" value="45" class="w-full accent-emerald-400 h-1.5 bg-zinc-700 rounded-lg cursor-pointer" />
+        </div>
+
+        <button id="saveBgModalBtn" type="button" class="w-full py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-xs font-bold text-white transition">
+          החל וסגור
         </button>
       </div>
     </div>
@@ -497,9 +627,39 @@
     const lineHeightSlider = document.getElementById('lineHeightSlider');
     const lineHeightValueLabel = document.getElementById('lineHeightValueLabel');
     const focusBandToggle = document.getElementById('focusBandToggle');
+    const remoteToggle = document.getElementById('remoteToggle');
     const studioMenuBtn = document.getElementById('studioMenuBtn');
     const studioMenuModal = document.getElementById('studioMenuModal');
     const closeStudioMenuBtn = document.getElementById('closeStudioMenuBtn');
+    const logoMenuBtn = document.getElementById('logoMenuBtn');
+    const logoModal = document.getElementById('logoModal');
+    const closeLogoModalBtn = document.getElementById('closeLogoModalBtn');
+    const saveLogoModalBtn = document.getElementById('saveLogoModalBtn');
+    const logoToggle = document.getElementById('logoToggle');
+    const logoFileInput = document.getElementById('logoFileInput');
+    const removeLogoBtn = document.getElementById('removeLogoBtn');
+    const logoSizeSlider = document.getElementById('logoSizeSlider');
+    const logoSizeLabel = document.getElementById('logoSizeLabel');
+    const logoOpacitySlider = document.getElementById('logoOpacitySlider');
+    const logoOpacityLabel = document.getElementById('logoOpacityLabel');
+    const logoPosBtns = document.querySelectorAll('.logo-pos-btn');
+    const screenLogoContainer = document.getElementById('screenLogoContainer');
+    const screenLogoImg = document.getElementById('screenLogoImg');
+    const screenBottomFade = document.getElementById('screenBottomFade');
+    const bgPreviewCanvas = document.getElementById('bgPreviewCanvas');
+    const bgMenuBtn = document.getElementById('bgMenuBtn');
+    const bgModal = document.getElementById('bgModal');
+    const closeBgModalBtn = document.getElementById('closeBgModalBtn');
+    const saveBgModalBtn = document.getElementById('saveBgModalBtn');
+    const bgModeBtns = document.querySelectorAll('.bg-mode-btn');
+    const bgStatusNote = document.getElementById('bgStatusNote');
+    const bgImageControls = document.getElementById('bgImageControls');
+    const bgFileInput = document.getElementById('bgFileInput');
+    const bgPresetDarkBtn = document.getElementById('bgPresetDarkBtn');
+    const bgPresetNavyBtn = document.getElementById('bgPresetNavyBtn');
+    const chromaControls = document.getElementById('chromaControls');
+    const chromaSlider = document.getElementById('chromaSlider');
+    const chromaValLabel = document.getElementById('chromaValLabel');
 
     // Voice Scrolling Controls
     const voiceModeBtn = document.getElementById('voiceModeBtn');
@@ -587,7 +747,24 @@
     let prompterMargin = 16;
     let prompterLineHeight = 1.6;
     let focusBandEnabled = true;
+    let remoteEnabled = true;
+    let lastRemoteActionAt = 0;
     let wakeLockSentinel = null;
+    let logoEnabled = true;
+    let logoDataUrl = '';
+    let logoSize = 72;
+    let logoOpacity = 90;
+    let logoPosition = 'right'; // 'right' | 'center' | 'left'
+    let logoImageObj = null;
+    let bgMode = 'none'; // 'none' | 'blur' | 'image' | 'greenscreen'
+    let bgPreset = 'navy'; // 'dark' | 'navy' | 'custom'
+    let bgImageDataUrl = '';
+    let bgImageObj = null;
+    let chromaTolerance = 45;
+    let selfieSeg = null;
+    let selfieSegBusy = false;
+    let latestSegMask = null;
+    let bgLoopId = null;
     let prompterColorClass = 'text-white';
     let lastFrameTime = null;
 
@@ -605,6 +782,8 @@
     let captionEnabled = true;
     let selectedCueStyle = 'broadcast';
     let lastRenderedCueId = null;
+    let recordingStartPerf = 0;
+    let captionHideTimeout = null;
     let editingCueId = null;
     let captionCues = [...DEFAULT_CUES];
 
@@ -664,10 +843,41 @@
         label.textContent = item.title;
         label.addEventListener('click', () => {
           activeScriptId = item.id;
+          saveSetting('prompter_active_script_id', activeScriptId);
           rawScript = item.content;
           scriptInput.value = item.content;
           scriptTitleInput.value = item.title;
-          renderRichScript(rawScript);
+          try {
+        const storedActiveId = Number(localStorage.getItem('prompter_active_script_id'));
+        if (storedActiveId && scriptLibrary.some((item) => item.id === storedActiveId)) {
+          activeScriptId = storedActiveId;
+        }
+        const storedFacing = localStorage.getItem('prompter_facing_mode');
+        if (storedFacing === 'user' || storedFacing === 'environment') facingMode = storedFacing;
+        const storedSens = Number(localStorage.getItem('prompter_voice_threshold'));
+        if (storedSens >= 1 && storedSens <= 15) {
+          voiceThreshold = storedSens;
+          voiceSensSlider.value = voiceThreshold;
+        }
+        if (localStorage.getItem('prompter_grid_enabled') === 'true') {
+          framingGrid.classList.remove('hidden');
+          toggleGridBtn.classList.add('bg-cyan-500', 'text-black');
+        }
+        const storedBgMode = localStorage.getItem('prompter_bg_mode');
+        if (storedBgMode) bgMode = storedBgMode;
+        const storedBgPreset = localStorage.getItem('prompter_bg_preset');
+        if (storedBgPreset) bgPreset = storedBgPreset;
+        const storedChroma = Number(localStorage.getItem('prompter_chroma_tol'));
+        if (storedChroma >= 15 && storedChroma <= 90) chromaTolerance = storedChroma;
+        const storedBgUrl = localStorage.getItem('prompter_bg_data');
+        if (storedBgUrl) { bgImageDataUrl = storedBgUrl; loadBgImageObj(); }
+        if (localStorage.getItem('prompter_light_enabled') === 'true') {
+          lightRingOverlay.classList.remove('hidden');
+          toggleLightBtn.classList.add('bg-amber-400', 'text-black');
+        }
+      } catch (e) {}
+
+      renderRichScript(rawScript);
           saveSetting('prompter_script', rawScript);
           resetScroll();
           renderScriptLibrary();
@@ -739,6 +949,7 @@
     function ensureAudioUnlocked() {
       if (mediaStream && !analyserNode) {
         setupAudioAnalyser(mediaStream);
+        startBgPreviewLoop();
       }
       if (audioCtx && audioCtx.state === 'suspended') {
         audioCtx.resume().catch(() => {});
@@ -817,10 +1028,26 @@
     function renderScreenCaption(sec) {
       const cue = getActiveCue(sec);
       if (!cue) {
-        screenCaptionBox.classList.add('hidden');
-        lastRenderedCueId = null;
+        if (lastRenderedCueId !== null) {
+          lastRenderedCueId = null;
+          screenCaptionBox.style.transition = 'opacity 0.6s ease-in-out';
+          screenCaptionBox.style.opacity = '0';
+          screenBottomFade.style.transition = 'opacity 0.6s ease-in-out';
+          screenBottomFade.style.opacity = '0';
+          clearTimeout(captionHideTimeout);
+          captionHideTimeout = setTimeout(() => {
+            if (lastRenderedCueId === null) {
+              screenCaptionBox.classList.add('hidden');
+              screenBottomFade.classList.add('hidden');
+            }
+          }, 620);
+        } else {
+          screenCaptionBox.classList.add('hidden');
+          screenBottomFade.classList.add('hidden');
+        }
         return;
       }
+      clearTimeout(captionHideTimeout);
 
       const isNewCue = lastRenderedCueId !== cue.id;
       lastRenderedCueId = cue.id;
@@ -837,7 +1064,27 @@
       screenCaptionInner.className = 'flex flex-col';
 
       const style = cue.style || 'broadcast';
-      const anim = isNewCue ? ' caption-animate' : '';
+      screenBottomFade.classList.toggle('hidden', style !== 'gold');
+      const anim = '';
+
+      if (isNewCue) {
+        screenCaptionBox.style.transition = 'none';
+        screenCaptionBox.style.opacity = '0';
+        if (style === 'gold') {
+          screenBottomFade.style.transition = 'none';
+          screenBottomFade.style.opacity = '0';
+        }
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            screenCaptionBox.style.transition = 'opacity 0.6s ease-in-out';
+            screenCaptionBox.style.opacity = '1';
+            if (style === 'gold') {
+              screenBottomFade.style.transition = 'opacity 0.6s ease-in-out';
+              screenBottomFade.style.opacity = '1';
+            }
+          });
+        });
+      }
 
       if (style === 'broadcast' || style === 'dark') {
         screenCaptionBox.className = `max-w-[94%] flex items-stretch gap-3 px-4 py-2.5 rounded-2xl bg-slate-950/88 backdrop-blur-md border border-white/15 shadow-[0_10px_30px_rgba(0,0,0,0.6)] text-right${anim}`;
@@ -854,6 +1101,11 @@
         screenCaptionMain.className = 'text-base font-extrabold text-white tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-snug';
         screenCaptionDivider.className = 'w-14 h-0.5 rounded-full bg-amber-400 my-1 shadow-[0_0_10px_rgba(251,191,36,0.8)]';
         screenCaptionSub.className = 'text-[11px] font-semibold text-amber-200 drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] leading-tight';
+      } else if (style === 'gold') {
+        screenCaptionBox.className = `w-full px-3 text-center${anim}`;
+        screenCaptionInner.className = 'w-full border-[1.5px] border-[#b48a3e] px-4 py-2.5 flex flex-col items-center justify-center bg-transparent';
+        screenCaptionMain.className = 'text-base font-extrabold text-zinc-900 leading-snug tracking-tight';
+        screenCaptionSub.className = 'text-sm font-medium text-zinc-800 leading-snug mt-0.5';
       } else if (style === 'glow') {
         screenCaptionBox.className = `max-w-[94%] px-4 py-2 text-center${anim}`;
         screenCaptionInner.className = 'flex flex-col items-center';
@@ -877,8 +1129,11 @@
       selectedCueStyle = style;
       capStyleBtns.forEach((b) => {
         const active = b.dataset.style === style;
-        b.classList.toggle('border-white', active);
+        b.classList.toggle('border-white', active && style !== 'gold');
         b.classList.toggle('border-cyan-400', active && style === 'broadcast');
+        b.classList.toggle('border-amber-600', active && style === 'gold');
+        b.classList.toggle('ring-2', active && style === 'gold');
+        b.classList.toggle('ring-amber-400', active && style === 'gold');
         b.classList.toggle('border-transparent', !active);
       });
     }
@@ -976,7 +1231,7 @@
         const storedSpeed = Number(localStorage.getItem('prompter_speed'));
         if (storedSpeed >= 10 && storedSpeed <= 80) scrollSpeed = storedSpeed;
         const storedFont = Number(localStorage.getItem('prompter_font_size'));
-        if (storedFont >= 14 && storedFont <= 38) fontSize = storedFont;
+        if (storedFont >= 14 && storedFont <= 54) fontSize = storedFont;
         const storedOpacity = localStorage.getItem('prompter_bg_opacity');
         if (storedOpacity !== null && Number(storedOpacity) >= 0 && Number(storedOpacity) <= 95) {
           bgOpacity = Number(storedOpacity);
@@ -989,6 +1244,18 @@
         if (storedLH >= 1.2 && storedLH <= 2.2) prompterLineHeight = storedLH;
         const storedFB = localStorage.getItem('prompter_focus_band');
         if (storedFB !== null) focusBandEnabled = storedFB === 'true';
+        const storedRem = localStorage.getItem('prompter_remote_enabled');
+        if (storedRem !== null) remoteEnabled = storedRem === 'true';
+        const storedLogoEnabled = localStorage.getItem('prompter_logo_enabled');
+        if (storedLogoEnabled !== null) logoEnabled = storedLogoEnabled === 'true';
+        const storedLogoUrl = localStorage.getItem('prompter_logo_data');
+        if (storedLogoUrl) logoDataUrl = storedLogoUrl;
+        const storedLogoSize = Number(localStorage.getItem('prompter_logo_size'));
+        if (storedLogoSize >= 36 && storedLogoSize <= 150) logoSize = storedLogoSize;
+        const storedLogoOp = Number(localStorage.getItem('prompter_logo_opacity'));
+        if (storedLogoOp >= 30 && storedLogoOp <= 100) logoOpacity = storedLogoOp;
+        const storedLogoPos = localStorage.getItem('prompter_logo_pos');
+        if (storedLogoPos === 'right' || storedLogoPos === 'center' || storedLogoPos === 'left') logoPosition = storedLogoPos;
         const storedColor = localStorage.getItem('prompter_color');
         if (storedColor) prompterColorClass = storedColor;
         const storedVoice = localStorage.getItem('prompter_voice_mode');
@@ -1011,6 +1278,23 @@
       applyFontSize();
       applyBgOpacity();
       applyPrompterLayout();
+      renderBrandLogo();
+      if (!logoDataUrl) {
+        loadLogoFromDB((dbLogo) => {
+          if (dbLogo) {
+            logoDataUrl = dbLogo;
+            renderBrandLogo();
+          }
+        });
+      }
+      if (!bgImageDataUrl) {
+        loadAssetFromDB('bg_image', (dbBg) => {
+          if (dbBg) {
+            bgImageDataUrl = dbBg;
+            loadBgImageObj();
+          }
+        });
+      }
       applyPrompterColor(prompterColorClass);
       applyAspectRatio(aspectRatio);
       updateVoiceModeUI();
@@ -1045,6 +1329,190 @@
 
       focusBand.classList.toggle('hidden', !focusBandEnabled);
       focusBandToggle.checked = focusBandEnabled;
+      remoteToggle.checked = remoteEnabled;
+    }
+
+    function renderBrandLogo() {
+      if (!logoEnabled || !logoDataUrl) {
+        screenLogoImg.classList.add('hidden');
+        return;
+      }
+      screenLogoImg.src = logoDataUrl;
+      screenLogoImg.style.width = `${logoSize}px`;
+      screenLogoImg.style.opacity = String(logoOpacity / 100);
+      screenLogoImg.classList.remove('hidden');
+
+      screenLogoContainer.className = 'absolute top-11 left-3 right-3 z-20 flex pointer-events-none';
+      if (logoPosition === 'right') {
+        screenLogoContainer.classList.add('justify-start'); // RTL start = right
+      } else if (logoPosition === 'center') {
+        screenLogoContainer.classList.add('justify-center');
+      } else {
+        screenLogoContainer.classList.add('justify-end'); // RTL end = left
+      }
+
+      if (!logoImageObj || logoImageObj.src !== logoDataUrl) {
+        const img = new Image();
+        img.onload = () => { logoImageObj = img; };
+        img.src = logoDataUrl;
+      }
+    }
+
+    function loadBgImageObj() {
+      if (!bgImageDataUrl) { bgImageObj = null; return; }
+      const img = new Image();
+      img.onload = () => { bgImageObj = img; };
+      img.src = bgImageDataUrl;
+    }
+
+    function drawBackgroundFill(ctx, w, h) {
+      if (bgPreset === 'custom' && bgImageObj && bgImageObj.complete && bgImageObj.naturalWidth > 0) {
+        const ir = bgImageObj.naturalWidth / bgImageObj.naturalHeight;
+        const cr = w / h;
+        let dw = w, dh = h, dx = 0, dy = 0;
+        if (ir > cr) { dw = h * ir; dx = (w - dw) / 2; }
+        else { dh = w / ir; dy = (h - dh) / 2; }
+        ctx.drawImage(bgImageObj, dx, dy, dw, dh);
+      } else {
+        const grad = ctx.createLinearGradient(0, 0, w, h);
+        if (bgPreset === 'dark') {
+          grad.addColorStop(0, '#18181b');
+          grad.addColorStop(1, '#27272a');
+        } else {
+          grad.addColorStop(0, '#0f172a');
+          grad.addColorStop(1, '#1e293b');
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+      }
+    }
+
+    function ensureSelfieSegmentation() {
+      if (selfieSeg) return;
+      if (window.SelfieSegmentation) {
+        initSelfieSegInstance();
+        return;
+      }
+      bgStatusNote.textContent = 'טוען מודל הפרדת רקע (AI)...';
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js';
+      script.onload = () => {
+        initSelfieSegInstance();
+        bgStatusNote.textContent = 'מודל הפרדת הרקע פעיל!';
+      };
+      script.onerror = () => {
+        bgStatusNote.textContent = 'לא ניתן לטעון מודל AI ללא אינטרנט — ניתן להשתמש במצב מסך ירוק.';
+      };
+      document.head.appendChild(script);
+    }
+
+    function initSelfieSegInstance() {
+      if (!window.SelfieSegmentation || selfieSeg) return;
+      selfieSeg = new window.SelfieSegmentation({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+      });
+      selfieSeg.setOptions({ modelSelection: 1 });
+      selfieSeg.onResults((results) => {
+        latestSegMask = results.segmentationMask;
+        selfieSegBusy = false;
+      });
+    }
+
+    function renderVirtualBackgroundFrame(targetCanvas, sx, sy, sw, sh) {
+      const ctx = targetCanvas.getContext('2d');
+      const w = targetCanvas.width;
+      const h = targetCanvas.height;
+
+      if (bgMode === 'greenscreen') {
+        // Draw background first
+        drawBackgroundFill(ctx, w, h);
+        // Draw camera onto temp canvas and chroma-key green pixels
+        const tmp = document.createElement('canvas');
+        tmp.width = w; tmp.height = h;
+        const tctx = tmp.getContext('2d');
+        tctx.save();
+        if (facingMode === 'user') { tctx.translate(w, 0); tctx.scale(-1, 1); }
+        tctx.drawImage(cameraPreview, sx, sy, sw, sh, 0, 0, w, h);
+        tctx.restore();
+        const frame = tctx.getImageData(0, 0, w, h);
+        const d = frame.data;
+        const tol = chromaTolerance;
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i], g = d[i + 1], b = d[i + 2];
+          if (g > 75 && g - r > tol && g - b > tol) {
+            d[i + 3] = 0;
+          }
+        }
+        tctx.putImageData(frame, 0, 0);
+        ctx.drawImage(tmp, 0, 0);
+        return;
+      }
+
+      // AI Blur / Image modes
+      if (selfieSeg && !selfieSegBusy && cameraPreview.readyState >= 2) {
+        selfieSegBusy = true;
+        selfieSeg.send({ image: cameraPreview }).catch(() => { selfieSegBusy = false; });
+      }
+
+      if (latestSegMask) {
+        // Draw background (blurred camera or custom image)
+        if (bgMode === 'blur') {
+          ctx.save();
+          ctx.filter = 'blur(14px)';
+          if (facingMode === 'user') { ctx.translate(w, 0); ctx.scale(-1, 1); }
+          ctx.drawImage(cameraPreview, sx, sy, sw, sh, 0, 0, w, h);
+          ctx.restore();
+        } else {
+          drawBackgroundFill(ctx, w, h);
+        }
+
+        // Composite crisp foreground person using mask
+        const fg = document.createElement('canvas');
+        fg.width = w; fg.height = h;
+        const fctx = fg.getContext('2d');
+        fctx.save();
+        if (facingMode === 'user') { fctx.translate(w, 0); fctx.scale(-1, 1); }
+        fctx.drawImage(latestSegMask, sx, sy, sw, sh, 0, 0, w, h);
+        fctx.globalCompositeOperation = 'source-in';
+        fctx.drawImage(cameraPreview, sx, sy, sw, sh, 0, 0, w, h);
+        fctx.restore();
+        ctx.drawImage(fg, 0, 0);
+      } else {
+        ctx.save();
+        if (facingMode === 'user') { ctx.translate(w, 0); ctx.scale(-1, 1); }
+        ctx.drawImage(cameraPreview, sx, sy, sw, sh, 0, 0, w, h);
+        ctx.restore();
+      }
+    }
+
+    function startBgPreviewLoop() {
+      cancelAnimationFrame(bgLoopId);
+      if (bgMode === 'none' || !mediaStream) {
+        bgPreviewCanvas.classList.add('hidden');
+        return;
+      }
+      if (bgMode === 'blur' || bgMode === 'image') ensureSelfieSegmentation();
+      bgPreviewCanvas.classList.remove('hidden');
+
+      const step = () => {
+        if (bgMode === 'none') {
+          bgPreviewCanvas.classList.add('hidden');
+          return;
+        }
+        if (cameraPreview.videoWidth > 0) {
+          const vw = cameraPreview.videoWidth;
+          const vh = cameraPreview.videoHeight;
+          const targetW = 360;
+          const targetH = Math.round((vh / vw) * targetW);
+          if (bgPreviewCanvas.width !== targetW || bgPreviewCanvas.height !== targetH) {
+            bgPreviewCanvas.width = targetW;
+            bgPreviewCanvas.height = targetH;
+          }
+          renderVirtualBackgroundFrame(bgPreviewCanvas, 0, 0, vw, vh);
+        }
+        bgLoopId = requestAnimationFrame(step);
+      };
+      bgLoopId = requestAnimationFrame(step);
     }
 
     async function requestWakeLock() {
@@ -1067,6 +1535,41 @@
         localStorage.setItem(key, String(value));
       } catch (e) {}
     }
+
+    function saveAssetToDB(key, dataUrl) {
+      try {
+        const req = indexedDB.open('prompter_assets_db', 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('assets')) db.createObjectStore('assets');
+        };
+        req.onsuccess = (e) => {
+          const db = e.target.result;
+          const tx = db.transaction('assets', 'readwrite');
+          if (dataUrl) tx.objectStore('assets').put(dataUrl, key);
+          else tx.objectStore('assets').delete(key);
+        };
+      } catch (e) {}
+    }
+
+    function loadAssetFromDB(key, callback) {
+      try {
+        const req = indexedDB.open('prompter_assets_db', 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('assets')) db.createObjectStore('assets');
+        };
+        req.onsuccess = (e) => {
+          const db = e.target.result;
+          const tx = db.transaction('assets', 'readonly');
+          const getReq = tx.objectStore('assets').get(key);
+          getReq.onsuccess = () => callback(getReq.result || '');
+        };
+      } catch (e) { callback(''); }
+    }
+
+    function saveLogoToDB(dataUrl) { saveAssetToDB('brand_logo', dataUrl); }
+    function loadLogoFromDB(cb) { loadAssetFromDB('brand_logo', cb); }
 
     async function initCamera() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1125,34 +1628,62 @@
         sy = (vh - sh) / 2;
       }
 
-      ctx.save();
-      if (facingMode === 'user') {
-        ctx.translate(w, 0);
-        ctx.scale(-1, 1);
+      if (bgMode !== 'none') {
+        renderVirtualBackgroundFrame(recordCanvas, sx, sy, sw, sh);
+      } else {
+        ctx.save();
+        if (facingMode === 'user') {
+          ctx.translate(w, 0);
+          ctx.scale(-1, 1);
+        }
+        ctx.drawImage(cameraPreview, sx, sy, sw, sh, 0, 0, w, h);
+        ctx.restore();
       }
-      ctx.drawImage(cameraPreview, sx, sy, sw, sh, 0, 0, w, h);
-      ctx.restore();
 
-      const cue = getActiveCue(secondsElapsed);
+      const exactSec = isRecording ? (performance.now() - recordingStartPerf) / 1000 : 0;
+      const cue = getActiveCue(exactSec);
       if (cue) {
+        const fadeDur = 0.6;
+        let fadeAlpha = 1;
+        if (exactSec - cue.startSec < fadeDur) {
+          fadeAlpha = Math.max(0, (exactSec - cue.startSec) / fadeDur);
+        } else if (cue.endSec - exactSec < fadeDur) {
+          fadeAlpha = Math.max(0, (cue.endSec - exactSec) / fadeDur);
+        }
         const hasSub = cue.sub && cue.sub.trim().length > 0;
         const style = cue.style || 'broadcast';
-        const boxW = Math.min(w * 0.88, 560);
+        const safeBottom = Math.round(h * 0.20);
+        const safeRight = Math.round(w * 0.15);
+        const safeLeft = Math.round(w * 0.06);
+        const boxW = w - safeRight - safeLeft;
         const boxH = hasSub ? 78 : 54;
-        const boxX = (w - boxW) / 2;
-        const boxY = h - boxH - 36;
+        const boxX = safeLeft;
+        const boxY = h - safeBottom - boxH;
 
         ctx.save();
+        ctx.globalAlpha = fadeAlpha;
         if (style === 'broadcast' || style === 'dark') {
-          ctx.shadowColor = 'rgba(0,0,0,0.6)';
-          ctx.shadowBlur = 18;
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.90)';
+          // Frosted transparent glass card matching live preview
+          ctx.save();
           ctx.beginPath();
           ctx.roundRect(boxX, boxY, boxW, boxH, 16);
-          ctx.fill();
-          ctx.shadowBlur = 0;
+          ctx.clip();
+          ctx.filter = 'blur(12px)';
+          ctx.save();
+          if (facingMode === 'user') {
+            ctx.translate(w, 0);
+            ctx.scale(-1, 1);
+          }
+          ctx.drawImage(cameraPreview, sx, sy, sw, sh, 0, 0, w, h);
+          ctx.restore();
+          ctx.filter = 'none';
+          ctx.fillStyle = style === 'dark' ? 'rgba(9, 9, 11, 0.42)' : 'rgba(255, 255, 255, 0.16)';
+          ctx.fillRect(boxX, boxY, boxW, boxH);
+          ctx.restore();
 
-          ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+          ctx.beginPath();
+          ctx.roundRect(boxX, boxY, boxW, boxH, 16);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
           ctx.lineWidth = 1.5;
           ctx.stroke();
 
@@ -1190,11 +1721,11 @@
           ctx.fillStyle = '#ffffff';
           ctx.textAlign = 'center';
           ctx.font = '800 21px Heebo, Inter, sans-serif';
-          ctx.fillText(cue.main, w / 2, boxY + 32, boxW - 28);
+          ctx.fillText(cue.main, boxX + boxW / 2, boxY + 32, boxW - 28);
           if (hasSub) {
             ctx.fillStyle = 'rgba(255,255,255,0.9)';
             ctx.font = '600 14px Heebo, Inter, sans-serif';
-            ctx.fillText(cue.sub, w / 2, boxY + 58, boxW - 28);
+            ctx.fillText(cue.sub, boxX + boxW / 2, boxY + 58, boxW - 28);
           }
         } else if (style === 'cinematic') {
           ctx.textAlign = 'center';
@@ -1216,6 +1747,35 @@
             ctx.fillStyle = '#fde68a';
             ctx.font = '600 15px Heebo, Inter, sans-serif';
             ctx.fillText(cue.sub, w / 2, boxY + 62, boxW);
+          }
+        } else if (style === 'gold') {
+          // Soft bottom white gradient fade + thin metallic gold frame + dark charcoal text
+          const fadeH = Math.round(h * 0.42);
+          const fadeGrad = ctx.createLinearGradient(0, h - fadeH, 0, h);
+          fadeGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+          fadeGrad.addColorStop(0.45, 'rgba(255, 255, 255, 0.68)');
+          fadeGrad.addColorStop(1, 'rgba(255, 255, 255, 0.94)');
+          ctx.fillStyle = fadeGrad;
+          ctx.fillRect(0, h - fadeH, w, fadeH);
+
+          const frameW = boxW;
+          const frameH = hasSub ? 82 : 56;
+          const frameX = boxX;
+          const frameY = h - safeBottom - frameH;
+
+          ctx.strokeStyle = '#b48a3e';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(frameX, frameY, frameW, frameH);
+
+          ctx.fillStyle = '#18181b';
+          ctx.textAlign = 'center';
+          ctx.font = '800 21px Heebo, Inter, sans-serif';
+          ctx.fillText(cue.main, frameX + frameW / 2, frameY + 34, frameW - 24);
+
+          if (hasSub) {
+            ctx.fillStyle = '#27272a';
+            ctx.font = '500 17px Heebo, Inter, sans-serif';
+            ctx.fillText(cue.sub, frameX + frameW / 2, frameY + 64, frameW - 24);
           }
         } else if (style === 'glow') {
           ctx.textAlign = 'center';
@@ -1283,6 +1843,23 @@
             ctx.fillText(cue.sub, w / 2, boxY + 67, boxW * 0.68);
           }
         }
+        ctx.restore();
+      }
+
+      // Draw Brand Logo onto recorded video if enabled
+      if (logoEnabled && logoImageObj && logoImageObj.complete && logoImageObj.naturalWidth > 0) {
+        const targetW = logoSize * (w / 380);
+        const aspect = logoImageObj.naturalHeight / logoImageObj.naturalWidth;
+        const targetH = targetW * aspect;
+        const pad = 22;
+        let lx = w - targetW - pad;
+        if (logoPosition === 'center') lx = (w - targetW) / 2;
+        else if (logoPosition === 'left') lx = pad;
+        const ly = pad;
+
+        ctx.save();
+        ctx.globalAlpha = logoOpacity / 100;
+        ctx.drawImage(logoImageObj, lx, ly, targetW, targetH);
         ctx.restore();
       }
 
@@ -1425,6 +2002,7 @@
         : 'מקליט וגולל... לחץ שוב לעצירה';
 
       secondsElapsed = 0;
+      recordingStartPerf = performance.now();
       updateTimerDisplay();
       renderScreenCaption(secondsElapsed);
       clearInterval(timerInterval);
@@ -1579,6 +2157,7 @@
 
     voiceSensSlider.addEventListener('input', (e) => {
       voiceThreshold = Number(e.target.value);
+      saveSetting('prompter_voice_threshold', voiceThreshold);
     });
 
     voiceModeBtn.addEventListener('click', () => {
@@ -1623,6 +2202,7 @@
     switchCamBtn.addEventListener('click', () => {
       if (isRecording || isCountingDown) return;
       facingMode = facingMode === 'user' ? 'environment' : 'user';
+      saveSetting('prompter_facing_mode', facingMode);
       initCamera();
     });
 
@@ -1667,6 +2247,7 @@
       framingGrid.classList.toggle('hidden', !active);
       toggleGridBtn.classList.toggle('bg-cyan-500', active);
       toggleGridBtn.classList.toggle('text-black', active);
+      saveSetting('prompter_grid_enabled', active);
     });
 
     toggleLightBtn.addEventListener('click', () => {
@@ -1674,6 +2255,7 @@
       lightRingOverlay.classList.toggle('hidden', !active);
       toggleLightBtn.classList.toggle('bg-amber-400', active);
       toggleLightBtn.classList.toggle('text-black', active);
+      saveSetting('prompter_light_enabled', active);
     });
     retryCameraBtn.addEventListener('click', initCamera);
 
@@ -1725,7 +2307,7 @@
     });
 
     // Close studio menu when opening sub-modals from inside it
-    [editScriptBtn, captionBtn, takesBtn].forEach((btn) => {
+    [editScriptBtn, captionBtn, takesBtn, logoMenuBtn, bgMenuBtn].forEach((btn) => {
       btn.addEventListener('click', () => {
         studioMenuModal.classList.add('hidden');
       });
@@ -1740,7 +2322,7 @@
     });
 
     fontUpBtn.addEventListener('click', () => {
-      if (fontSize < 38) {
+      if (fontSize < 54) {
         fontSize += 2;
         applyFontSize();
         saveSetting('prompter_font_size', fontSize);
@@ -1775,6 +2357,7 @@
       const newId = Date.now();
       scriptLibrary.push({ id: newId, title, content });
       activeScriptId = newId;
+      saveSetting('prompter_active_script_id', activeScriptId);
       saveLibrary();
       renderScriptLibrary();
     });
@@ -1880,6 +2463,231 @@
       recordedVideoPlayer.pause();
       videoPreviewModal.classList.add('hidden');
     });
+
+    // Brand Logo Modal Events
+    function syncLogoModalUI() {
+      logoToggle.checked = logoEnabled;
+      logoSizeSlider.value = logoSize;
+      logoSizeLabel.textContent = `${logoSize}px`;
+      logoOpacitySlider.value = logoOpacity;
+      logoOpacityLabel.textContent = `${logoOpacity}%`;
+      logoPosBtns.forEach((b) => {
+        const active = b.dataset.pos === logoPosition;
+        b.classList.toggle('border-fuchsia-400', active);
+        b.classList.toggle('border-transparent', !active);
+      });
+    }
+
+    logoMenuBtn.addEventListener('click', () => {
+      syncLogoModalUI();
+      logoModal.classList.remove('hidden');
+    });
+
+    function closeLogoModal() {
+      logoEnabled = logoToggle.checked;
+      saveSetting('prompter_logo_enabled', logoEnabled);
+      renderBrandLogo();
+      logoModal.classList.add('hidden');
+    }
+
+    closeLogoModalBtn.addEventListener('click', closeLogoModal);
+    saveLogoModalBtn.addEventListener('click', closeLogoModal);
+
+    logoFileInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const rawData = String(ev.target.result || '');
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 512;
+          let tw = img.width;
+          let th = img.height;
+          if (tw > maxDim || th > maxDim) {
+            if (tw >= th) {
+              th = Math.round((th * maxDim) / tw);
+              tw = maxDim;
+            } else {
+              tw = Math.round((tw * maxDim) / th);
+              th = maxDim;
+            }
+          }
+          const c = document.createElement('canvas');
+          c.width = tw;
+          c.height = th;
+          c.getContext('2d').drawImage(img, 0, 0, tw, th);
+          logoDataUrl = c.toDataURL('image/png');
+          logoEnabled = true;
+          logoToggle.checked = true;
+          saveSetting('prompter_logo_data', logoDataUrl);
+          saveSetting('prompter_logo_enabled', true);
+          saveLogoToDB(logoDataUrl);
+          renderBrandLogo();
+        };
+        img.src = rawData;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    removeLogoBtn.addEventListener('click', () => {
+      logoDataUrl = '';
+      logoImageObj = null;
+      logoEnabled = false;
+      logoToggle.checked = false;
+      try { localStorage.removeItem('prompter_logo_data'); } catch (e) {}
+      saveLogoToDB('');
+      saveSetting('prompter_logo_enabled', false);
+      renderBrandLogo();
+    });
+
+    logoSizeSlider.addEventListener('input', (e) => {
+      logoSize = Number(e.target.value);
+      logoSizeLabel.textContent = `${logoSize}px`;
+      saveSetting('prompter_logo_size', logoSize);
+      renderBrandLogo();
+    });
+
+    logoOpacitySlider.addEventListener('input', (e) => {
+      logoOpacity = Number(e.target.value);
+      logoOpacityLabel.textContent = `${logoOpacity}%`;
+      saveSetting('prompter_logo_opacity', logoOpacity);
+      renderBrandLogo();
+    });
+
+    logoPosBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        logoPosition = btn.dataset.pos;
+        saveSetting('prompter_logo_pos', logoPosition);
+        syncLogoModalUI();
+        renderBrandLogo();
+      });
+    });
+
+    remoteToggle.addEventListener('change', (e) => {
+      remoteEnabled = e.target.checked;
+      saveSetting('prompter_remote_enabled', remoteEnabled);
+    });
+
+    // Bluetooth Remote & Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (!remoteEnabled) return;
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      const key = e.key;
+      const now = performance.now();
+
+      // Shutter / Record keys from Bluetooth remotes
+      if (key === 'Enter' || key === ' ' || key === 'AudioVolumeUp' || key === 'AudioVolumeDown' || key === 'Camera' || key === 'MediaPlayPause') {
+        e.preventDefault();
+        if (now - lastRemoteActionAt < 400) return;
+        lastRemoteActionAt = now;
+        ensureAudioUnlocked();
+        if (isCountingDown) cancelCountdown();
+        else if (isRecording) stopRecording();
+        else startCountdown();
+        return;
+      }
+
+      // D-pad Up / Down -> Speed control
+      if (key === 'ArrowUp') {
+        e.preventDefault();
+        scrollSpeed = Math.min(80, scrollSpeed + 4);
+        speedSlider.value = scrollSpeed;
+        speedValueLabel.textContent = scrollSpeed;
+        saveSetting('prompter_speed', scrollSpeed);
+      } else if (key === 'ArrowDown') {
+        e.preventDefault();
+        scrollSpeed = Math.max(10, scrollSpeed - 4);
+        speedSlider.value = scrollSpeed;
+        speedValueLabel.textContent = scrollSpeed;
+        saveSetting('prompter_speed', scrollSpeed);
+      } else if (key === 'ArrowLeft' || key === 'ArrowRight') {
+        if (isRecording) {
+          e.preventDefault();
+          toggleScrollPause();
+        }
+      }
+    });
+
+    // Virtual Background Modal Events
+    function syncBgModalUI() {
+      bgModeBtns.forEach((b) => {
+        const active = b.dataset.bgmode === bgMode;
+        b.classList.toggle('border-teal-400', active);
+        b.classList.toggle('border-transparent', !active);
+      });
+      bgImageControls.classList.toggle('hidden', bgMode !== 'image' && bgMode !== 'greenscreen');
+      chromaControls.classList.toggle('hidden', bgMode !== 'greenscreen');
+      chromaSlider.value = chromaTolerance;
+      chromaValLabel.textContent = chromaTolerance;
+    }
+
+    bgMenuBtn.addEventListener('click', () => {
+      syncBgModalUI();
+      bgModal.classList.remove('hidden');
+    });
+
+    bgModeBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        bgMode = btn.dataset.bgmode;
+        saveSetting('prompter_bg_mode', bgMode);
+        syncBgModalUI();
+        startBgPreviewLoop();
+      });
+    });
+
+    bgPresetDarkBtn.addEventListener('click', () => {
+      bgPreset = 'dark';
+      saveSetting('prompter_bg_preset', 'dark');
+      bgStatusNote.textContent = 'נבחר רקע פחם משרדי.';
+    });
+
+    bgPresetNavyBtn.addEventListener('click', () => {
+      bgPreset = 'navy';
+      saveSetting('prompter_bg_preset', 'navy');
+      bgStatusNote.textContent = 'נבחר רקע כחול יוקרתי.';
+    });
+
+    bgFileInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 1080;
+          let tw = img.width, th = img.height;
+          if (tw > maxDim || th > maxDim) {
+            if (tw >= th) { th = Math.round((th * maxDim) / tw); tw = maxDim; }
+            else { tw = Math.round((tw * maxDim) / th); th = maxDim; }
+          }
+          const c = document.createElement('canvas');
+          c.width = tw; c.height = th;
+          c.getContext('2d').drawImage(img, 0, 0, tw, th);
+          bgImageDataUrl = c.toDataURL('image/jpeg', 0.85);
+          bgPreset = 'custom';
+          loadBgImageObj();
+          saveSetting('prompter_bg_preset', 'custom');
+          saveSetting('prompter_bg_data', bgImageDataUrl);
+          saveAssetToDB('bg_image', bgImageDataUrl);
+          bgStatusNote.textContent = 'תמונת הרקע נשמרה ותופיע בצילום!';
+        };
+        img.src = String(ev.target.result || '');
+      };
+      reader.readAsDataURL(file);
+    });
+
+    chromaSlider.addEventListener('input', (e) => {
+      chromaTolerance = Number(e.target.value);
+      chromaValLabel.textContent = chromaTolerance;
+      saveSetting('prompter_chroma_tol', chromaTolerance);
+    });
+
+    function closeBgModal() { bgModal.classList.add('hidden'); }
+    closeBgModalBtn.addEventListener('click', closeBgModal);
+    saveBgModalBtn.addEventListener('click', closeBgModal);
 
     // Initialize App
     loadSavedState();
