@@ -114,7 +114,7 @@
     </div>
 
     <!-- 3. Teleprompter Overlay + Vertical Right Progress Slider -->
-    <div id="prompterWrapper" class="relative z-20 mx-3 mt-1 flex items-stretch gap-2" style="height: 208px;">
+    <div id="prompterWrapper" class="relative z-20 mx-3 mt-1 flex items-stretch gap-2" style="height: 280px;">
       <!-- Vertical Progress Slider (Right side in RTL) -->
       <div class="w-8 bg-black/55 backdrop-blur-md rounded-2xl border border-white/15 py-2 flex flex-col items-center justify-between gap-1.5 shrink-0">
         <span id="progressPercentLabel" class="text-[9px] font-mono font-bold text-indigo-300">0%</span>
@@ -122,7 +122,7 @@
       </div>
 
       <!-- Teleprompter Text Box (tap to pause/resume during recording) -->
-      <div id="prompterBox" class="relative flex-1 h-full rounded-2xl bg-black/60 backdrop-blur-sm border border-white/15 overflow-hidden prompter-mask cursor-pointer select-none" title="הקש להשהיה או המשך בזמן הקלטה">
+      <div id="prompterBox" class="relative flex-1 h-full rounded-2xl bg-black/40 backdrop-blur-sm border border-white/15 overflow-hidden prompter-mask cursor-pointer select-none" title="הקש להשהיה או המשך בזמן הקלטה">
         <!-- Active-Line Focus Band -->
         <div id="focusBand" class="absolute top-10 left-0 right-0 h-11 bg-indigo-500/15 border-y border-indigo-400/45 pointer-events-none"></div>
         <!-- Tap Pause Badge -->
@@ -130,18 +130,27 @@
           מושהה (הקש להמשך)
         </div>
         <div id="prompterTrack" class="pt-11 pb-40 text-right will-change-transform" style="padding-left: 16px; padding-right: 16px;">
-          <div id="scriptContent" class="font-semibold text-white drop-shadow whitespace-pre-line" style="font-size: 20px; line-height: 1.6;"></div>
+          <div id="scriptContent" class="font-semibold text-white drop-shadow whitespace-pre-line" style="font-size: 28px; line-height: 1.6;"></div>
         </div>
       </div>
+    </div>
+
+    <!-- Always-Visible Scroll Speed Bar right below Prompter -->
+    <div class="relative z-20 mx-3 mt-1.5 bg-black/50 backdrop-blur-md border border-white/15 rounded-full px-3.5 py-1 flex items-center gap-2.5">
+      <span class="text-[11px] font-semibold text-zinc-200 shrink-0">מהירות</span>
+      <input id="speedSlider" type="range" min="10" max="80" value="28" class="flex-1 accent-indigo-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg" aria-label="מהירות גלילה" />
+      <span id="speedValueLabel" class="text-[11px] font-mono font-bold text-indigo-300 w-6 text-left">28</span>
+    </div>
+
+    <!-- On-Screen Brand Logo Overlay (sits cleanly below prompter & speed bar, never covers text or bottom captions) -->
+    <div id="screenLogoContainer" class="relative z-10 px-4 mt-1.5 flex justify-start pointer-events-none">
+      <img id="screenLogoImg" alt="לוגו מותג" class="hidden object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.75)] rounded-lg" style="width: 72px; opacity: 0.9;" />
     </div>
 
     <!-- Spacer -->
     <div class="flex-1"></div>
 
-    <!-- 3a. On-Screen Brand Logo Overlay (top-right corner, clear of bottom captions) -->
-    <div id="screenLogoContainer" class="absolute top-11 left-3 right-3 z-20 flex justify-start pointer-events-none">
-      <img id="screenLogoImg" alt="לוגו מותג" class="hidden object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.75)] rounded-lg" style="width: 72px; opacity: 0.9;" />
-    </div>
+
 
     <!-- 3b. On-Screen Pro Broadcast Timed Caption -->
     <div id="screenCaptionContainer" class="relative z-10 pr-[15%] pl-[6%] mb-5 flex justify-center pointer-events-none">
@@ -195,21 +204,12 @@
         </div>
       </div>
 
-      <!-- Teleprompter Settings Bar -->
+      <!-- Teleprompter Settings Bar (Font Size + Text Color) -->
       <div class="w-full bg-zinc-900/85 border border-white/10 rounded-2xl px-3.5 py-2.5 backdrop-blur-md flex items-center justify-between gap-3">
-        <div class="flex-1 flex flex-col gap-1">
-          <div class="flex items-center justify-between text-[11px] text-zinc-300">
-            <span>מהירות</span>
-            <span id="speedValueLabel" class="font-mono font-semibold text-indigo-300">28</span>
-          </div>
-          <input id="speedSlider" type="range" min="10" max="80" value="28" class="w-full accent-indigo-500 cursor-pointer h-1.5 bg-zinc-700 rounded-lg" aria-label="מהירות גלילה" />
-        </div>
-
-        <div class="w-px h-8 bg-white/10"></div>
 
         <div class="flex items-center gap-1">
           <button id="fontDownBtn" type="button" class="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-xs font-bold text-zinc-200 transition active:scale-95" title="הקטן טקסט">א-</button>
-          <span id="fontSizeLabel" class="text-xs font-mono text-zinc-300 w-6 text-center">20</span>
+          <span id="fontSizeLabel" class="text-xs font-mono text-zinc-300 w-6 text-center">28</span>
           <button id="fontUpBtn" type="button" class="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-xs font-bold text-zinc-200 transition active:scale-95" title="הגדל טקסט">א+</button>
         </div>
 
@@ -225,8 +225,8 @@
       <!-- Background Opacity Slider Row -->
       <div class="w-full bg-zinc-900/85 border border-white/10 rounded-2xl px-3.5 py-1.5 backdrop-blur-md flex items-center gap-3">
         <span class="text-[11px] text-zinc-300 shrink-0">שקיפות רקע</span>
-        <input id="opacitySlider" type="range" min="0" max="95" value="60" class="flex-1 accent-cyan-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg" aria-label="שקיפות רקע הפרומפטר" />
-        <span id="opacityValueLabel" class="text-[11px] font-mono font-semibold text-cyan-300 w-8 text-left">60%</span>
+        <input id="opacitySlider" type="range" min="0" max="95" value="42" class="flex-1 accent-cyan-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg" aria-label="שקיפות רקע הפרומפטר" />
+        <span id="opacityValueLabel" class="text-[11px] font-mono font-semibold text-cyan-300 w-8 text-left">42%</span>
       </div>
 
       <!-- Eye-Line Height, Margins & Line Spacing Row -->
@@ -234,9 +234,9 @@
         <div class="flex flex-col gap-1">
           <div class="flex items-center justify-between text-[10px] text-zinc-300">
             <span>גובה חלונית</span>
-            <span id="heightValueLabel" class="font-mono text-indigo-300">208</span>
+            <span id="heightValueLabel" class="font-mono text-indigo-300">280</span>
           </div>
-          <input id="heightSlider" type="range" min="140" max="300" value="208" class="w-full accent-indigo-400 h-1 bg-zinc-700 rounded-lg cursor-pointer" aria-label="גובה חלונית הפרומפטר" />
+          <input id="heightSlider" type="range" min="140" max="360" value="280" class="w-full accent-indigo-400 h-1 bg-zinc-700 rounded-lg cursor-pointer" aria-label="גובה חלונית הפרומפטר" />
         </div>
         <div class="flex flex-col gap-1">
           <div class="flex items-center justify-between text-[10px] text-zinc-300">
@@ -605,10 +605,13 @@
         </div>
       </div>
 
-      <!-- Post-Recording Export with Captions & Trim -->
+      <!-- Post-Recording Export & Unified Save Button -->
       <div class="w-full flex items-center justify-between gap-2">
         <button id="exportWithCaptionsBtn" type="button" class="flex-1 py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-extrabold transition active:scale-95">
-          ייצא ושמור סרטון (עם כתוביות וחיתוך)
+          ייצא סרטון (עם כתוביות וחיתוך)
+        </button>
+        <button id="saveExportedVideoBtn" type="button" class="hidden py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold transition active:scale-95">
+          שמור סרטון
         </button>
       </div>
       <p id="exportStatusText" class="hidden text-xs font-semibold text-amber-300 text-center"></p>
@@ -778,6 +781,8 @@
     const previewCaptionSub = document.getElementById('previewCaptionSub');
     const exportWithCaptionsBtn = document.getElementById('exportWithCaptionsBtn');
     const exportStatusText = document.getElementById('exportStatusText');
+    const saveExportedVideoBtn = document.getElementById('saveExportedVideoBtn');
+    let lastExportedBlob = null;
     const trimEndBadge = document.getElementById('trimEndBadge');
     const setTrimEndBtn = document.getElementById('setTrimEndBtn');
     const resetTrimEndBtn = document.getElementById('resetTrimEndBtn');
@@ -805,9 +810,9 @@
     let timerInterval = null;
     let secondsElapsed = 0;
     let scrollSpeed = 28;
-    let fontSize = 20;
-    let bgOpacity = 60;
-    let prompterHeight = 208;
+    let fontSize = 28;
+    let bgOpacity = 42;
+    let prompterHeight = 280;
     let prompterMargin = 16;
     let prompterLineHeight = 1.6;
     let focusBandEnabled = true;
@@ -1311,7 +1316,7 @@
           bgOpacity = Number(storedOpacity);
         }
         const storedH = Number(localStorage.getItem('prompter_height'));
-        if (storedH >= 140 && storedH <= 300) prompterHeight = storedH;
+        if (storedH >= 140 && storedH <= 360) prompterHeight = storedH;
         const storedM = Number(localStorage.getItem('prompter_margin'));
         if (storedM >= 12 && storedM <= 56) prompterMargin = storedM;
         const storedLH = Number(localStorage.getItem('prompter_line_height'));
@@ -1416,7 +1421,7 @@
       screenLogoImg.style.opacity = String(logoOpacity / 100);
       screenLogoImg.classList.remove('hidden');
 
-      screenLogoContainer.className = 'absolute top-11 left-3 right-3 z-20 flex pointer-events-none';
+      screenLogoContainer.className = 'relative z-10 px-4 mt-1.5 flex pointer-events-none';
       if (logoPosition === 'right') {
         screenLogoContainer.classList.add('justify-start'); // RTL start = right
       } else if (logoPosition === 'center') {
@@ -2225,13 +2230,15 @@
               takeCounter += 1;
               const now = new Date();
               const timeStr = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+              lastExportedBlob = blob;
               savedTakes.push({
                 id: Date.now(),
                 number: takeCounter,
                 durationSec: secondsElapsed,
                 timeStr,
                 ratio: aspectRatio,
-                url: lastVideoUrl
+                url: lastVideoUrl,
+                blob
               });
               updateTakesBadge();
               downloadLink.href = lastVideoUrl;
@@ -2297,6 +2304,59 @@
       renderScreenCaption(0);
     }
 
+    async function saveOrDownloadVideo(blob, fileName, statusEl) {
+      if (!blob) return;
+      // 1. Native Android APK (Capacitor Filesystem + Share)
+      const cap = window.Capacitor;
+      if (cap && cap.Plugins && cap.Plugins.Filesystem) {
+        try {
+          if (statusEl) {
+            statusEl.classList.remove('hidden');
+            statusEl.textContent = 'שומר קובץ למכשיר...';
+          }
+          const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const res = String(reader.result || '');
+              resolve(res.split(',')[1] || '');
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          const saved = await cap.Plugins.Filesystem.writeFile({
+            path: fileName,
+            data: base64,
+            directory: 'DOCUMENTS'
+          });
+          if (statusEl) {
+            statusEl.textContent = `נשמר במכשיר (Documents/${fileName})`;
+          }
+          if (cap.Plugins.Share) {
+            await cap.Plugins.Share.share({
+              title: 'סרטון מהפרומפטר',
+              url: saved.uri
+            });
+          }
+          return;
+        } catch (err) {
+          if (statusEl) statusEl.textContent = 'שגיאה בשמירה למכשיר, מנסה הורדה רגילה...';
+        }
+      }
+
+      // 2. Browser fallback (<a download>)
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      if (statusEl) {
+        statusEl.classList.remove('hidden');
+        statusEl.textContent = `הסרטון ירד לתיקיית ההורדות (${fileName})`;
+      }
+    }
+
     function getMaxScrollY() {
       const total = prompterTrack.scrollHeight - prompterBox.clientHeight;
       return Math.max(100, total);
@@ -2356,16 +2416,23 @@
         watchBtn.textContent = 'צפה';
         watchBtn.addEventListener('click', () => {
           takesModal.classList.add('hidden');
+          lastVideoUrl = take.url;
+          lastExportedBlob = take.blob || null;
           recordedVideoPlayer.src = take.url;
           resetTrimEndUI();
+          saveExportedVideoBtn.dataset.filename = `take-${take.number}.webm`;
+          saveExportedVideoBtn.classList.remove('hidden');
+          exportStatusText.classList.add('hidden');
           videoPreviewModal.classList.remove('hidden');
         });
 
-        const dlBtn = document.createElement('a');
-        dlBtn.href = take.url;
-        dlBtn.download = `take-${take.number}.webm`;
+        const dlBtn = document.createElement('button');
+        dlBtn.type = 'button';
         dlBtn.className = 'px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[11px] font-bold text-black';
         dlBtn.textContent = 'הורד';
+        dlBtn.addEventListener('click', () => {
+          saveOrDownloadVideo(take.blob, `take-${take.number}.webm`, null);
+        });
 
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
@@ -2861,14 +2928,31 @@
         };
         expRecorder.onstop = () => {
           const outBlob = new Blob(chunks, { type: 'video/webm' });
+          lastExportedBlob = outBlob;
           const outUrl = URL.createObjectURL(outBlob);
+          const fileName = `prompter-export-${Date.now()}.webm`;
           lastVideoUrl = outUrl;
           recordedVideoPlayer.src = outUrl;
           downloadLink.href = outUrl;
-          downloadLink.download = `captioned-video-${Date.now()}.webm`;
+          downloadLink.download = fileName;
+          saveExportedVideoBtn.dataset.filename = fileName;
+          saveExportedVideoBtn.classList.remove('hidden');
           downloadArea.classList.remove('hidden');
+
+          takeCounter += 1;
+          savedTakes.push({
+            id: Date.now(),
+            number: takeCounter,
+            durationSec: Math.round(targetEnd),
+            timeStr: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) + ' (מיוצא)',
+            ratio: aspectRatio,
+            url: outUrl,
+            blob: outBlob
+          });
+          updateTakesBadge();
+
           exportWithCaptionsBtn.disabled = false;
-          exportStatusText.textContent = 'הסרטון עם הכתוביות מוכן להורדה!';
+          exportStatusText.textContent = 'הסרטון יוצא בהצלחה! לחץ על "שמור סרטון"';
         };
 
         let drawHandle = null;
@@ -2934,7 +3018,36 @@
       recordedVideoPlayer.src = lastVideoUrl;
       previewSecondsBadge.textContent = '0.0 שניות';
       resetTrimEndUI();
+      saveExportedVideoBtn.dataset.filename = `prompter-video-${Date.now()}.webm`;
+      saveExportedVideoBtn.classList.remove('hidden');
+      exportStatusText.classList.add('hidden');
       videoPreviewModal.classList.remove('hidden');
+    });
+
+    downloadLink.addEventListener('click', (e) => {
+      const cap = window.Capacitor;
+      if (cap && cap.Plugins && cap.Plugins.Filesystem && lastExportedBlob) {
+        e.preventDefault();
+        saveOrDownloadVideo(lastExportedBlob, downloadLink.download || `prompter-video-${Date.now()}.webm`, null);
+      }
+    });
+
+    saveExportedVideoBtn.addEventListener('click', async () => {
+      if (!lastExportedBlob) return;
+      const fileName = saveExportedVideoBtn.dataset.filename || `prompter-video-${Date.now()}.webm`;
+      const cap = window.Capacitor;
+      if (cap && cap.Plugins && cap.Plugins.Filesystem) {
+        await saveOrDownloadVideo(lastExportedBlob, fileName, exportStatusText);
+        return;
+      }
+      const file = new File([lastExportedBlob], fileName, { type: 'video/webm' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'סרטון מהפרומפטר' });
+          return;
+        } catch (e) {}
+      }
+      await saveOrDownloadVideo(lastExportedBlob, fileName, exportStatusText);
     });
 
     closeVideoModalBtn.addEventListener('click', () => {
